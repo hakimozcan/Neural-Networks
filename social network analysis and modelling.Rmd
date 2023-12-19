@@ -1,11 +1,4 @@
----
-title: "Lab Assignment 2"
-authors: "Abdulhakim Özcan (184268) & Uygar Talu (9554041)"
-date: "2023-03-14"
-output: html_document
----
-
-# Lab Assignment 2: Social Network Analysis and Modeling
+# Social Network Analysis and Modeling
 
 ## Import Packages
 
