@@ -1,0 +1,2775 @@
+---
+title: "Lab Assignment 2"
+authors: "Abdulhakim Özcan (184268) & Uygar Talu (9554041)"
+date: "2023-03-14"
+output: html_document
+---
+
+# Lab Assignment 2: Social Network Analysis and Modeling
+
+## Import Packages
+
+```{r}
+# install libraries
+#install.packages("moments")
+#install.packages(c("htmltools", "visNetwork"), dependencies = TRUE)
+
+# call libraries
+library(igraph)              #used to create and analyze graphs and networks.
+library(RColorBrewer)
+library(visNetwork)          #used for interactive network visualization.
+library(htmltools)
+library(moments)
+```
+
+## Exercise 1: Analyzing an Offline and Online Social Networks
+
+### Import Data
+
+```{r}
+# datainput
+highschool_edge<-read.csv("Highschool_network_edge.csv",header=FALSE)
+highschool_att<-read.csv("Highschool_network_att.csv", header = TRUE)
+        
+facebook_edge<-read.csv("Facebook_network_edge.csv",header=FALSE)
+facebook_att<-read.csv("Facebook_network_att.csv",header = TRUE)
+```
+
+### Build Network Objects
+
+```{r}
+# Build high school network
+
+# Create a data frame of nodes with columns "name," "gender," and "hall".
+highschool_nodes<-data.frame(name=as.character(highschool_att$NodeID),
+                  gender=as.character(highschool_att$Gender),
+                  hall=as.character(highschool_att$Hall))
+
+# Create a data frame of edges with columns "from" and "to".
+highschool_edges<-data.frame(from=c(as.character(highschool_edge[,1])),
+                  to=c(as.character(highschool_edge[,2])))
+
+# Build high school network with highschool_edges and highschool_nodes data frames.
+Highschool<-graph_from_data_frame(highschool_edges, 
+                                  directed = FALSE, 
+                                  vertices = highschool_nodes)
+
+# Identify the components of the Highschool graph.
+co <- components(Highschool)
+
+# Extract the largest component of the Highschool graph. 
+# The "which.max" function is used to find the index of the largest component in the "csize" vector of the "co" object. 
+Highschool <- induced.subgraph(Highschool, which(co$membership == which.max(co$csize))) #use only the largest component for analysis
+summary(Highschool)
+```
+
+```{r}
+# build facebook network
+facebook_nodes<-data.frame(name=as.character(facebook_att$NodeID))
+
+facebook_edges<-data.frame(from=c(as.character(facebook_edge[,1])),
+                           to=c(as.character(facebook_edge[,2])))
+
+Facebook<-graph_from_data_frame(facebook_edges,directed = FALSE,vertices = facebook_nodes)
+summary(Facebook)
+```
+
+### Node-Level Centrality Measures
+
+#### Question 1 (3 points):
+
+##### Find out the node ID of a) highest degree b) highest betweenness c) highest closeness and d) highest eigenvector in the Highschool network.
+
+```{r}
+#function to calculate centrality metrics
+
+# Calculates the degree centrality for each node in the high school network. 
+# The "mode = 'all'" argument indicates that both incoming and outgoing edges will be counted.
+degree(Highschool, mode = "all")
+closeness(Highschool, normalized = TRUE)
+betweenness(Highschool, directed = FALSE, normalized = TRUE)
+eigen_centrality(Highschool)
+
+
+#function to visualize the network (with interaction)
+set.seed(100)
+Highschool_interactive_layout<-
+visNetwork(data.frame(id=V(Highschool)$name), highschool_edges, main =
+"Highschool",submain="Can zoom in/out to check the IDs and ties") %>%
+  visIgraphLayout(layout = "layout_nicely",smooth =  FALSE) %>%
+  visNodes(shape="circle",label = TRUE) %>%
+       
+visOptions(highlightNearest = list(enabled = T, hover = T),
+nodesIdSelection = T)
+Highschool_interactive_layout
+```
+
+```{r}
+# Calculate centrality metrics
+deg <- degree(Highschool, mode = "all")
+betw <- betweenness(Highschool, directed = FALSE, normalized = TRUE)
+clos <- closeness(Highschool, normalized = TRUE)
+eig <- eigen_centrality(Highschool)$vector
+
+# Find nodes with highest centrality scores
+high_deg <- which(deg == max(deg))
+high_betw <- which(betw == max(betw))
+high_clos <- which(clos == max(clos))
+high_eig <- which(eig == max(eig))
+
+cat("Node with highest degree centrality:", high_deg, "\n")
+cat("Node with highest betweenness centrality:", high_betw, "\n")
+cat("Node with highest closeness centrality:", high_clos, "\n")
+cat("Node with highest eigenvector centrality:", high_eig, "\n")
+```
+##### Highlight the above nodes in the Highschool network;
+
+```{r}
+# Create color palette for nodes
+node_colors <- rep("blue", vcount(Highschool))
+node_colors[high_deg] <- "red"
+node_colors[high_betw] <- "yellow"
+# Since the same node has both the highest betweenness centrality and the highest closeness centrality simultaneously,
+# the yellow color above will be overwritten by the magenta color below.
+node_colors[high_clos] <- "magenta"
+node_colors[high_eig] <- "green"
+
+# Create color palette for edges
+edge_colors <- colorRampPalette(brewer.pal(9, "Set1"))(length(E(Highschool)))
+
+# Visualize network with highlighted nodes
+set.seed(100)
+Highschool_interactive_layout <- 
+  visNetwork(nodes = data.frame(id = V(Highschool)$name, color = node_colors),
+             edges = highschool_edges,
+             main = "Highschool",
+             submain = "Can zoom in/out to check the IDs and ties") %>%
+  visIgraphLayout(layout = "layout_nicely", smooth = FALSE) %>%
+  visNodes(shape = "circle", label = TRUE) %>%
+  visEdges(color = edge_colors) %>%
+  visOptions(highlightNearest = list(enabled = TRUE, hover = TRUE),
+             nodesIdSelection = TRUE)
+Highschool_interactive_layout
+```
+
+
+##### Explain why these metrics identify the same node or different nodes as the most central one.
+
+Degree centrality measures the number of edges linked to a node. These nodes are highly connected in the network and thus have the most connections to other nodes. In this case, node 54 has the highest degree centrality score.
+
+Betweenness centrality measures the number of shortest paths that goes through a node. These nodes facilitate communication and connections between different parts of a network. They act as bridge between those separate parts. In this case, node 37 has the highest betweenness centrality score.
+
+Closeness centrality measures the mean shortest path distance from one node to remaning nodes in the network. These nodes can reach other nodes more quickly. In this case, node 37 has the highest closeness centrality. Note that node 37 also has the highest betweenness centrality score.
+
+Eigenvector centrality measures the signficance of a node based on importance of the neighboring nodes around that node. These nodes have connections to other important nodes in the network and are thus deemed to be more influential. In this case, node 110 has the highest eigenvector centrality score.  
+
+In general, these four metrics - degree, betweenness, closeness, and eigenvector - measure different aspects of node centrality.
+
+
+
+#### Question 2 (5 points):
+
+##### Study the correlations between a) degree and betweenness, b) degree and closeness, c) degree and eigenvector for all the nodes in the Highschool network; Study the correlations between a) degree and betweenness, b) degree and closeness, c) degree and eigenvector for all the nodes in the Facebook network; 
+
+```{r}
+# Calculate centrality metrics for Highschool network
+deg_hs <- degree(Highschool, mode = "all")
+betw_hs <- betweenness(Highschool, directed = FALSE, normalized = TRUE)
+clos_hs <- closeness(Highschool, normalized = TRUE)
+eig_hs <- eigen_centrality(Highschool)$vector
+
+# Calculate and print correlations between centrality metrics for Highschool network
+cor_deg_betw_hs <- cor(deg_hs, betw_hs)
+cor_deg_clos_hs <- cor(deg_hs, clos_hs)
+cor_deg_eig_hs <- cor(deg_hs, eig_hs)
+
+cat("Correlations between centrality metrics for Highschool network:\n")
+cat("Correlation between degree and betweenness:", cor_deg_betw_hs, "\n")
+cat("Correlation between degree and closeness:", cor_deg_clos_hs, "\n")
+cat("Correlation between degree and eigenvector:", cor_deg_eig_hs, "\n")
+
+
+
+# Calculate centrality metrics for Facebook network
+deg_fb <- degree(Facebook, mode = "all")
+betw_fb <- betweenness(Facebook, directed = FALSE, normalized = TRUE)
+clos_fb <- closeness(Facebook, normalized = TRUE)
+eig_fb <- eigen_centrality(Facebook)$vector
+
+# Calculate and print correlations between centrality metrics for Facebook network
+cor_deg_betw_fb <- cor(deg_fb, betw_fb)
+cor_deg_clos_fb <- cor(deg_fb, clos_fb)
+cor_deg_eig_fb <- cor(deg_fb, eig_fb)
+
+cat("\n")
+cat("Correlations between centrality metrics for Facebook network:\n")
+cat("Correlation between degree and betweenness:", cor_deg_betw_fb, "\n")
+cat("Correlation between degree and closeness:", cor_deg_clos_fb, "\n")
+cat("Correlation between degree and eigenvector:", cor_deg_eig_fb, "\n")
+```
+
+Scatter Plots
+
+```{r}
+# Scatter plot of degree vs betweenness
+plot(degree(Highschool), betweenness(Highschool, normalized = TRUE),
+     xlab = "Degree", ylab = "Betweenness", main = "Highschool Network")
+abline(lm(betweenness(Highschool, normalized = TRUE) ~ degree(Highschool)),
+       col = "red")
+
+# Scatter plot of degree vs closeness
+plot(degree(Highschool), closeness(Highschool, normalized = TRUE),
+     xlab = "Degree", ylab = "Closeness", main = "Highschool Network")
+abline(lm(closeness(Highschool, normalized = TRUE) ~ degree(Highschool)),
+       col = "red")
+
+# Scatter plot of degree vs eigenvector
+plot(degree(Highschool), eigen_centrality(Highschool)$vector,
+     xlab = "Degree", ylab = "Eigenvector", main = "Highschool Network")
+abline(lm(eigen_centrality(Highschool)$vector ~ degree(Highschool)),
+       col = "red")
+```
+
+```{r}
+# Scatter plot of degree vs betweenness
+plot(degree(Facebook), betweenness(Facebook, normalized = TRUE),
+     xlab = "Degree", ylab = "Betweenness", main = "Facebook Network")
+abline(lm(betweenness(Facebook, normalized = TRUE) ~ degree(Facebook)),
+       col = "red")
+
+# Scatter plot of degree vs closeness
+plot(degree(Facebook), closeness(Facebook, normalized = TRUE),
+     xlab = "Degree", ylab = "Closeness", main = "Facebook Network")
+abline(lm(closeness(Facebook, normalized = TRUE) ~ degree(Facebook)),
+       col = "red")
+
+# Scatter plot of degree vs eigenvector
+plot(degree(Facebook), eigen_centrality(Facebook)$vectore,
+     xlab = "Degree", ylab = "Eigenvector", main = "Facebook Network")
+abline(lm(eigen_centrality(Facebook)$vector ~ degree(Facebook)),
+       col = "red")
+```
+
+
+##### From the above results, how well do different metrics correlate with each other? Which centrality metric will you use and why?
+
+In the high school network, degree centrality has the strongest correlation with closeness centrality (0.77), followed by betweenness (0.63) and eigenvector (0.63). On the other hand, in the Facebook network, degree centrality has the strongest correlation with eigenvector centrality (0.57), followed by betweenness (0.45) and closeness (0.27).
+
+The choice of which centrality metric to use depends on the specific research question and the purpose of the research. If the goal is to find the nodes with most connecion in a network, then degree centrality would be a good choice. Or if the goal is to find nodes with most important connections, then eigenvector centrality would be useful. Howevver, in general, it is considered important to use several centrality metrics to get a more complete and robust result.
+
+### Using Network-Level Measures to Explain Degrees of Separation
+#### Question 3 (5 points):
+
+As can be seen below, both the Highschool and Facebook networks exhibit the "six degrees of separation" phenomenon, with 99% and 98% of their respective nodes being reachable within 6 path lengths.
+
+##### The shortest path lengths between every pair of two nodes for Highschool network: 
+
+The following code calculates the shortest path lengths between every pair of two nodes. 99% of the nodes in Highschool network can be reached within 6 path lengths.
+
+```{r}
+# Shortest path lengths between every pair of two nodes
+dist_mat <- distances(Highschool, 
+                      v = V(Highschool), 
+                      to = V(Highschool),
+                      mode = c("all", "out", "in"), 
+                      weights = NULL)
+
+# Get vector of shortest path lengths
+dist_vec <- as.vector(dist_mat)
+
+# Calculate percentage of nodes that can be reached within 6 path lengths
+pct_reachable <- mean(dist_vec <= 6) * 100
+
+# Histogram of shortest path lengths
+hist(dist_vec, breaks = 10, freq = FALSE, main = "Highschool - Shortest Path Length Distribution",
+     xlab = "Shortest Path Length", ylab = "Density", col = "skyblue", border = "white")
+
+# Add vertical reference line at 6 shortest path lengths
+abline(v = 6, col = "red", lwd = 2, lty = "dashed")
+
+# Add text label indicating percentage of nodes reachable within 6 path lengths
+text(x = 7.2, y = 0.25, labels = paste0(round(pct_reachable), "% reachable within \n 6 path lengths"),
+     col = "red", font = 2, cex = 0.9)
+```
+
+##### The shortest path lengths between every pair of two nodes for Facebook network:
+
+The following code calculates the shortest path lengths between every pair of two nodes. 98% of the nodes i Facebook network can be reached within 6 path lengths.
+
+```{r}
+# Shortest path lengths between every pair of two nodes
+dist_mat <- distances(Facebook, 
+                      v = V(Facebook), 
+                      to = V(Facebook),
+                      mode = c("all", "out", "in"), 
+                      weights = NULL)
+
+# Get vector of shortest path lengths
+dist_vec <- as.vector(dist_mat)
+
+# Calculate percentage of nodes that can be reached within 6 path lengths
+pct_reachable <- mean(dist_vec <= 6) * 100
+
+# Histogram of shortest path lengths
+hist(dist_vec, breaks = 10, freq = FALSE, main = "Facebook - Shortest Path Length Distribution",
+     xlab = "Shortest Path Length", ylab = "Density", col = "skyblue", border = "white")
+
+# Add vertical reference line at 6 shortest path lengths
+abline(v = 6, col = "red", lwd = 2, lty = "dashed")
+
+# Add text label indicating percentage of nodes reachable within 6 path lengths
+text(x = 7.2, y = 0.3, labels = paste0(round(pct_reachable), "% reachable within \n 6 path lengths"),
+     col = "red", font = 2, cex = 0.9)
+```
+
+##### Degree distribution comparison for Highschool and Facebook networks:
+
+The Facebook network has a highly skewed degree distribution, with many nodes having few connections and only a few nodes having many connections. On the other hand, the Highschool network has a less skewed degree distribution, as students generally have a more similar number of friends compared to Facebook users. Despite this difference, both networks have a low degree of separation, meaning that most nodes can be reached within a few path lengths. This indicates that the networks are relatively small and interconnected, making it easy to navigate from one node to another. 
+
+
+```{r}
+# Degree distribution comparison for Highschool and Facebook networks. 
+
+par(mfrow=c(1,2)) # create a 1x2 subplot
+
+# Degree distribution for Highschool network 
+hist(degree(Highschool), breaks=20, main="Highschool Degree Distribution",
+     xlab="Degree", col="lightblue", xlim=c(0, 20))
+
+
+# Degree distribution for Facebook network 
+hist(degree(Facebook), breaks=100, main="Facebook Degree Distribution",
+     xlab="Degree", col="lightgreen", xlim=c(0, 300))
+
+```
+
+
+### Meso-Scale Structure
+
+#### Question 4: Test the above hypothesis by the following steps (4 points):
+
+1)  Visualize the network and color the nodes by gender and residential hall, respectively.
+2)  Build 8 subgraphs of the original network according to gender and residential hall: 1 subgraph for female student, 1 subgraph for male student, 1 subgraph for students with unknown gender, and 5 subgraphs for students living in residential hall from 1501 to 1505, respectively. For example, to build a subgraph of all female students, you should keep all the nodes of female students and the edges between them. Other nodes and edges are removed.
+3)  Study the edge density of all the subgraph and compare them to the edge density of the original network. What is your conclusion for the hypothesis?
+
+##### Visualize the network and color the nodes by gender and calculate subgraph density:
+
+```{r}
+## visualize the network by gender###
+
+coul  <- brewer.pal(length(unique(V(Highschool)$gender)), "Set3")
+my_color <- coul[as.numeric(as.factor(V(Highschool)$gender))]
+set.seed(10)
+
+plot(Highschool, 
+     vertex.color = my_color, 
+     vertex.size=5,
+     layout=layout.fruchterman.reingold(Highschool),
+     vertex.label=NA, 
+     main="Highschool network by gender")
+
+legend("bottomleft", 
+       legend=levels(as.factor(V(Highschool)$gender)), 
+       col = coul, bty = "n", pch=20, pt.cex = 2, 
+       cex = 1.5, horiz = FALSE, inset = c(0.1, 0.0))
+
+```
+
+```{r}
+library(RColorBrewer)
+coul  <- brewer.pal(length(unique( V(Highschool)$hall)), "Set1")
+my_color <- coul[as.numeric(as.factor(V(Highschool)$hall))]
+set.seed(10)
+plot(Highschool, 
+     vertex.color = my_color,
+     vertex.size=5,
+     layout=layout.fruchterman.reingold(Highschool), 
+     vertex.label=NA,
+     main="Highschool network by residential hall")
+
+legend("bottomleft", 
+       legend=levels(as.factor(V(Highschool)$hall)),
+       col = coul , bty = "n", pch=20 , pt.cex = 2, 
+       cex = 1.5, horiz = FALSE, inset = c(0.1, 0.0))
+
+```
+
+This code creates eight subgraphs for female students, male students, students with unknown gender, and students living in residential halls 1501 to 1505. We then calculate the edge density for each subgraph and compare them to the edge density of the original network.
+
+The results show that the edge densities of the subgraphs are generally higher than the edge density of the original network. This indicates that students who share common characteristics, such as living in the same residential hall or being of the same gender, are more likely to be friends.
+
+Overall, we can conclude that the hypothesis is supported by the meso-scale structure of the Highschool network.
+
+
+##### Introduce subgraphs and calculate edge densities
+
+
+The following code will output the edge density of the original network and all its subgraphs. 
+
+The subgraph of female students has a higher edge density than that of the original network, which suggests that female students are more likely to be friends with each other. 
+The subgraph of male students has a higher edge density than than that of the original network, which suggests that male students are more likely to be friends with each other.
+The subgraph of students with an unknown gender has a lower edge density than that of the original network, which suggests that students with unknown gender are less likely to be friends with each other.
+
+The subgraphs of students residing in halls 1501 to 1505 have higher edge densities than that of the original network, which suggests that students living in the same residential hall are more likely to be friends with each other.
+
+Overall, these observations support the hypothesis that students with common characteristics are more likely to be friends.
+
+
+```{r}
+# Introduce subgraphs by gender
+group_gender <- as.factor(unique(V(Highschool)$gender))
+subgraphs_gender <- lapply(levels(group_gender), function(x) {
+  induced_subgraph(Highschool, which(V(Highschool)$gender == x))
+})
+
+# Introduce subgraphs by residential hall
+group_hall <- as.factor(unique(V(Highschool)$hall))
+subgraphs_hall <- lapply(levels(group_hall), function(x) {
+  induced_subgraph(Highschool, which(V(Highschool)$hall == x))
+})
+
+# Calculate edge densities for gender subgraphs
+gender_densities <- sapply(subgraphs_gender, function(subgraph) {
+  paste0("Density for ", V(subgraph)$gender[1], " friends is ", edge_density(subgraph))
+})
+
+# Calculate edge densities for residential hall subgraphs
+hall_densities <- sapply(subgraphs_hall, function(subgraph) {
+  paste0("Density for ", V(subgraph)$hall[1], " friends is ", edge_density(subgraph))
+})
+
+# Print the edge densities for gender subgraphs
+cat("Edge densities by gender:\n")
+cat(gender_densities, sep = "\n")
+cat("\n")
+
+# Print the edge densities for residential hall subgraphs
+cat("Edge densities by residential hall:\n")
+cat(hall_densities, sep = "\n")
+
+# Calculate the edge density of the original network
+orig_density <- edge_density(Highschool)
+cat("\n")
+
+# Print the edge densities for the original network
+cat("Edge density of the original network: ", orig_density)
+```
+
+
+#### Question 5 (4 points)
+
+##### 1)  Calculate the modularity of the Highschool network if community is merely identified by a) gender and b) residential hall, respectively.
+
+```{r}
+# Calculate modularity based on gender
+genderCommunity <- V(Highschool)$gender
+genderCommunity <- replace(genderCommunity, genderCommunity == "female", 1)
+genderCommunity <- replace(genderCommunity, genderCommunity == "male", 2)
+genderCommunity <- replace(genderCommunity, genderCommunity == "unknown", 3)
+genderCommunity <- as.numeric(genderCommunity)
+gender.clustering <- make_clusters(Highschool, membership = genderCommunity)
+gender_modularity <- modularity(gender.clustering)
+
+# Calculate modularity based on residential hall
+hallCommunity <- as.numeric(as.factor(V(Highschool)$hall))
+hall.clustering <- make_clusters(Highschool, membership = hallCommunity)
+hall_modularity <- modularity(hall.clustering)
+
+# Print the results
+cat("Modularity based on gender: ", gender_modularity, "\n")
+cat("Modularity based on residential hall: ", hall_modularity, "\n")
+```
+
+
+##### 2)  Search the Louvain Community Detection and explain the algorithm in your own words.
+
+The Louvain Community Detection is an agglomerative and hierarchical algorithm for identifying communities in complex networks. The algorithm is based on modularity optimization which measures the strength of connections within a community compared to those outside the community. The algorithm proceeds in two phases. In the first phase, each node is assigned to its own community. Then, for each node, the algorithm evaluates whether moving the node to its neighboring community or removing it from its current community would enhance the network's modularity. If it would, the node is moved. If not, it stays in its current group. This process is repeated for all nodes until no further improvement is possible. In the second phase, the algorithm aggreagtes the nodes belonging to the same community and creates a new network where each community becomes a single node. The weights of the edges between the new nodes are determined by summing the edge weights between the communities in the original network. These two stages are repeated iteratively until the modularity can no longer be increased. At the end of the process, the algorithm returns the community structure that has the highest modularity. 
+The method is fast and scalable and provides high quality results. It serves as a strong baseline for new community detection in large networks.
+
+
+##### 3)  Use the Louvain Community Detection to identify communities in the Highschool network. Compare the modularity value produced by the Louvain algorithm to those in 1), and explain the reasons for the differences.
+
+```{r}
+# Run Louvain Community Detection algorithm
+Louv <- cluster_louvain(Highschool)
+
+# Calculate modularity
+cat("Modularity based on Louvain Community Detection:", modularity(Louv))
+```
+
+The Louvain algorithm's modularity value of 0.7008373 indicates a strong community structure in the Highschool network. This value is significantly higher than the modularity values based on gender and residential hall, which were 4.782675e-05 and 0.1755911, respectively. Gender-based modularity value is very low, gender is not a strong predictor of community structure in the network. Although the residential hall-based modularity value was slightly higher than the gender-based value, it was still lower than the Louvain algorithm's value. This suggests that the residential hall may be a slightly better predictor of community structure than gender, but still not as strong as the Louvain algorithm. The reason for the differences in modularity values is that the Louvain algorithm takes into account the overall connectivity of the network and identifies communities based on shared connections and network topology, rather than relying solely on the attributes of individual nodes.
+
+
+## EXERCISE 2: NETWROK FORMATION MODELS
+
+### Erdos-Renyi random network
+
+#### Question 6 (3 points):
+
+##### 1)  Develop three networks with the same number of vertices (n), but different probability (p); Name them as ER1, ER2, and ER3. Develop the plots of ER1, ER2 and ER3, describe how these three graphs look differently as p increase and explain why.
+
+```{r}
+# Set the number of vertices (n) and probabilities (p)
+n <- 20
+p1 <- 0.2
+p2 <- 0.5
+p3 <- 0.8
+
+# Generate the three networks with different probabilities
+ER1 <- erdos.renyi.game(n, p1)
+ER2 <- erdos.renyi.game(n, p2)
+ER3 <- erdos.renyi.game(n, p3)
+
+# Plot the three networks
+par(mfrow=c(1,3))
+plot(ER1, main=paste("ER1 (p =", p1, ")"))
+plot(ER2, main=paste("ER2 (p =", p2, ")"))
+plot(ER3, main=paste("ER3 (p =", p3, ")"))
+```
+
+
+When p increases, the resulting graphs that result become denser with more edges. This implies that as the value of p increases, the likelihood of nodes being connected to each other also increases. This trend is apparent in the plots: ER1 appears more sparse and has fewer edges, while ER3 is more dense with more edges. ER2 falls in the middle. Therefore, as the probability increases, the resulting graphs become denser with more edges.
+
+
+
+##### 2)  For a large n (e.g., n=1000), study the relation between clustering coefficient of the network and p, and explain the reason for such a relation. (You can use the function of transitivity (graph.object) to calculate clustering coefficient).
+
+```{r}
+# Set the number of vertices (n)
+n <- 1000
+
+# Create a vector of probabilities (p) to test
+p_values <- seq(from=0, to=1, by=0.01)
+
+# Create empty vectors to store the results
+clustering_coefficients <- rep(0, length(p_values))
+
+# Generate networks with different probabilities and calculate their clustering coefficients
+for (i in 1:length(p_values)) {
+  network <- erdos.renyi.game(n, p_values[i])
+  clustering_coefficients[i] <- transitivity(network)
+}
+
+# Plot the results
+plot(p_values, clustering_coefficients, type="l", xlab="Probability (p)", ylab="Clustering Coefficient", main="Clustering Coefficient vs. Probability")
+```
+
+As seen from the above plot, as probability of connectivity (p) in the netwrok increase, the clustering coefficient also increases. This is because when the probability increases, the network becomes more dense, and allows for more connections (edges) between nodes. As a result, nodes become more interconnected and this leads to higher clustering coefficient, which measures the level of interconnectedness among the neighbors of a node.
+
+```{r}
+Regular<-watts.strogatz.game(dim=1,size=300,nei=6, p=0)
+plot(Regular, layout=layout.circle, vertex.label=NA, vertex.size=5, main=
+"Network with zero rewiring probability ")
+SW1<-watts.strogatz.game(dim=1,size=300,nei=6, p=0.001)
+plot(SW1, layout=layout.circle, vertex.label=NA, vertex.size=5, main=
+"Network with 0.001 rewiring probability ")
+SW2<-watts.strogatz.game(dim=1,size=300,nei=6, p=0.01)
+plot(SW2, layout=layout.circle, vertex.label=NA, vertex.size=5, main=
+"Network with 0.01 rewiring probability ")
+SW3<-watts.strogatz.game(dim=1,size=300,nei=6, p=0.1)
+plot(SW3, layout=layout.circle, vertex.label=NA, vertex.size=5, main=
+"Network with 0.1 rewiring probability ")
+```
+
+
+### Small-World Network
+
+#### Question 7 (2 points):
+
+##### Check the clustering coefficient and average path length of the Regular, SW1, SW2 and SW3. Describe the trend of clustering coefficient and average path length as p increase. Which graph does mimic the desirable attributes of a small world network?
+
+```{r}
+# Calculate the clustering coefficient of each network
+cc_regular <- transitivity(Regular)
+cc_sw1 <- transitivity(SW1)
+cc_sw2 <- transitivity(SW2)
+cc_sw3 <- transitivity(SW3)
+
+# Calculate the average path length of each network
+apl_regular <- average.path.length(Regular)
+apl_sw1 <- average.path.length(SW1)
+apl_sw2 <- average.path.length(SW2)
+apl_sw3 <- average.path.length(SW3)
+
+# Output the results
+cat("Regular:\n", "Clustering Coefficient:", cc_regular, "\n Average Path Length:", apl_regular, "\n\n")
+cat("SW1:\n", "Clustering Coefficient:", cc_sw1, "\n Average Path Length:", apl_sw1, "\n\n")
+cat("SW2:\n", "Clustering Coefficient:", cc_sw2, "\n Average Path Length:", apl_sw2, "\n\n")
+cat("SW3:\n", "Clustering Coefficient:", cc_sw3, "\n Average Path Length:", apl_sw3, "\n\n")
+```
+
+As the rewiring probability (p) increases, the network's clustering coefficient and average path length decline. This behaviour is in line with the expected properties of small-world networks.
+
+The regular lattice exhibits the highest clustering coefficient (0.6818) and the highest average path length (12.9599), which is is in line with the expected properties of regular structure.
+
+The small-world network with p=0.001 (SW1) possesses a clustering coefficient of 0.6793 and an average path length of 11.0896, which is similar to the regular lattice's clustering coefficient but with a reduced average path length. This suggests that it has some of the properties of a small-world network.
+
+The small-world network with p=0.01 (SW2) has a much lower clustering coefficient of 0.6417 and a much shorter average path length of 4.5255. This suggests that it leans more towards the properties of a random network, but still has some of the properties of a small-world network.
+
+The small-world network with p=0.1 (SW3) has the lowest clustering coefficient of 0.3605 and the lowest average path length of 2.9054. This suggests that it has the properties of a random network, with very few local connections, and is not a good representation of a small-world network.
+
+Based on the clustering coefficient and average path length results, the small-world network with p=0.001 (SW1) is the closest match to desirable attributes of a small-world network. It has a clustering coefficient close to that of the regular lattice, while still having a lower average path length, which suggests that it has some of the global connectivity properties of a random network.
+
+
+
+#### Question 8 (5 points):
+
+##### 1)  Start with a regular network of size=300, nei=6, first reproduce the Figure 2 of Watts and Strogatz (1998). Then provide the range of p which can turn this regular network (size=300, nei=6) into a small-world network.
+
+
+```{r}
+
+size <- 300
+nei <- 6
+
+# Create a regular network
+g_regular <- graph.lattice(c(size), nei, nei/2, circular=TRUE)
+
+# Plot the regular network
+plot(g_regular, vertex.size=5, vertex.color="blue", edge.color="gray")
+```
+
+```{r}
+c_regular <- transitivity(g_regular, type="undirected")
+l_regular <- mean_distance(g_regular, directed=FALSE)
+```
+
+
+```{r}
+# Create a regular graph of size 300 and degree 6
+g <- watts.strogatz.game(1, 300, 6, 0)
+
+# Visualize the network
+plot(g, vertex.size = 2, vertex.color = "black", vertex.label = NA)
+```
+
+```{r}
+library(igraph)
+
+# Create a regular graph of size 300 and degree 6
+g <- watts.strogatz.game(1, 300, 6, 0)
+
+# Visualize the network
+plot(g, vertex.size = 2, vertex.color = "black", vertex.label = NA)
+
+# Calculate clustering coefficient and average path length for regular network
+C_reg <- mean(transitivity(g))
+L_reg <- mean_distance(g)
+
+# Create a random network with the same number of nodes and edges
+g_rand <- erdos.renyi.game(300, 12/(300-1))
+
+# Calculate clustering coefficient and average path length for random network
+C_rand <- mean(transitivity(g_rand))
+L_rand <- mean_distance(g_rand)
+
+# Calculate clustering coefficient and average path length for rewired networks with different p values
+p_values <- seq(0, 1, by = 0.05)
+C <- numeric(length(p_values))
+L <- numeric(length(p_values))
+for (i in seq_along(p_values)) {
+  weights <- degree(g)
+  g_rewired <- rewire_edges(g, each_edge(prob = p_values[i]), weights = weights)
+  C[i] <- mean(transitivity(g_rewired))
+  L[i] <- mean_distance(g_rewired)
+}
+
+# Plot results
+plot(p_values, C, type = "l", ylim = c(0, 1), xlab = "Rewiring probability (p)", ylab = "Clustering coefficient")
+lines(c(0, 1), c(C_reg, C_rand), lty = 2, col = "red")
+legend("bottomright", legend = c("Regular", "Random"), lty = c(1, 2), col = c("black", "red"))
+
+plot(p_values, L/L_reg, type = "l", ylim = c(0, 3), xlab = "Rewiring probability (p)", ylab = "Normalized average path length")
+lines(c(0, 1), c(1, L_rand/L_reg), lty = 2, col = "red")
+legend("topright", legend = c("Regular", "Random"), lty = c(1, 2), col = c("black", "red"))
+
+
+```
+
+
+##### 2)  Do you need to rewire significant amount of connections to make the network small- world-like?
+
+##### 3)  In the paper of Watts and Strogatz (1998), they pointed out that the value of p has two important implications:
+
+### Barabasi-Albert (BA) scale-free network
+
+#### Question 9 (3 points):
+
+```{r}
+g0 <- barabasi.game(100, power = 1, m = NULL, out.dist = NULL, out.seq = NULL, out.pref = FALSE, 
+                    zero.appeal = 1, directed = FALSE, algorithm="psumtree", start.graph = NULL)
+
+plot(g0, vertex.label= NA, edge.arrow.size=0.02, vertex.size =5, main = "Scale-free network model (power = 1)")
+```
+
+In the 'barabasi.game' function above, the power hyperparameter determines the degree distribution of the resulting scale-free network. In a scale-free network, node degrees follow a power-law distribution. This means that a small power hyperparameter results in few nodes with high degree (hubs) and many nodes with low degree (connections), while a high-power parameter leads to a few nodes with high degree and many nodes with low degree. The power parameter also controls the strength of the preferential attachment rule, which means that new nodes tend to connect with nodes that have a high degree. A high-power parameter results in a stronger preference for high-degree nodes. When the power parameter is 1, the network is expected to have a scale-free degree distribution, with a small number of hubs and many nodes with a few connections. However, for other power parameter values, the degree distribution may not follow a power-law distribution.
+
+
+
+1)  What does the power in the above function mean? How can it govern the structure of the network? (Hint: Change the value of power from 0.05, 0.5, 1, 1.5; See how the plot evolves; if you still fail to see the difference, visualize the vertex size according to the edge number, you can consider the code below.)
+
+```{r}
+
+# Define the size of the network
+n <- 100
+
+# Define a range of power values to try
+powers <- c(0.05, 0.5, 1, 1.5)
+
+# Create a plot for each power value
+par(mfrow=c(2,2))
+for (i in 1:length(powers)) {
+  power <- powers[i]
+  g <- barabasi.game(n, power=power, directed=FALSE)
+  vertex_size <- 2 + 5*degree/max(degree(g))
+  plot(g, vertex.size=vertex_size, vertex.label=NA, edge.arrow.size=0.02, main=paste("Power =", power))
+}
+
+```
+
+
+
+2)  For two networks with a power of 0.5 and 1.5, respectively, what will be their resilience for 1) random attack, and 2) targeted attack? (the meanings of 'random attack' and 'targeted attack' are the same as what is mentioned in Lecture 6, scale- free network)
+
+```{r}
+
+# Load the necessary library
+library(igraph)
+
+# Generate a scale-free network with power of 0.5
+g1 <- barabasi.game(100, power = 0.5, m = NULL, out.dist = NULL, out.seq = NULL, out.pref = FALSE, 
+                    zero.appeal = 1, directed = FALSE, algorithm = "psumtree", start.graph = NULL)
+# Generate a scale-free network with power of 1.5
+g2 <- barabasi.game(100, power = 1.5, m = NULL, out.dist = NULL, out.seq = NULL, out.pref = FALSE, 
+                    zero.appeal = 1, directed = FALSE, algorithm = "psumtree", start.graph = NULL)
+
+
+# Function to calculate network resilience
+# If the attack type is random, the function randomly removes %10 of the nodes from the network. 
+# If the attack type is targeted, the function remove %10 of the highest-degree nodes from the network. 
+network_resilience <- function(graph, attack_type, percentage = 0.1) {
+  nodes_to_remove <- round(vcount(graph) * percentage)
+  
+  # Compute the size of the largest connected component before the attack
+  initial_lcc_size <- max(components(graph)$csize)
+  
+  if (attack_type == "random") {
+    selected_nodes <- sample(V(graph), nodes_to_remove)
+  } else if (attack_type == "targeted") {
+    sorted_nodes <- sort(V(graph), decreasing = TRUE, by = function(x) degree(graph, x))
+    selected_nodes <- sorted_nodes[1:nodes_to_remove]
+  }
+  remaining_graph <- delete_vertices(graph, selected_nodes)
+  
+  # Compute the size of the largest connected component after the attack
+  largest_connected_component <- max(components(remaining_graph)$csize)
+  
+  # Compute the ratio of the largest connected component after the attack to before the attack
+  resilience_ratio <- largest_connected_component / initial_lcc_size
+  return(resilience_ratio)
+}
+
+# Compute resilience for random and targeted attacks
+random_attack_resilience_g1 <- network_resilience(g1, "random")
+random_attack_resilience_g2 <- network_resilience(g2, "random")
+targeted_attack_resilience_g1 <- network_resilience(g1, "targeted")
+targeted_attack_resilience_g2 <- network_resilience(g2, "targeted")
+
+cat("Resilience ratio under random attack (power=0.5):", round(random_attack_resilience_g1, 3), "\n")
+cat("Resilience ratio under random attack (power=1.5):", round(random_attack_resilience_g2, 3), "\n")
+cat("Resilience ratio under targeted attack (power=0.5):", round(targeted_attack_resilience_g1, 3), "\n")
+cat("Resilience ratio under targeted attack (power=1.5):", round(targeted_attack_resilience_g2, 3), "\n")
+
+```
+The above results show the resilience ratios of the two scale-free networks with power values of 0.5 and 1.5 under both random and targeted attacks. In the code above, the resilience ratio is defined as the size of the largest connected component after the attack divided by the size of the largest connected component before the attack. A high ratio means better resilience. 
+
+Resilience ratio under random attack (power=0.5): 0.85 – This network has a high resilience ratio under random attacks. 85% of the largest connected component remains connected after removing 10% of the nodes randomly.”
+
+Resilience ratio under random attack (power=1.5): 0.38 – This network has a lower resilience ratio under random attacks compared to the network with power 0.5. Only 38% of the largest connected component remains connected after removing 10% of the nodes randomly.
+
+Resilience ratio under targeted attack (power=0.5): 0.9 – This network has a high resilience ratio under targeted attacks. 90% of the largest connected component remains connected after removing 10% of the highest-degree nodes. 
+
+Resilience ratio under targeted attack (power=1.5): 0.9 – This network has a high resilience ratio under targeted attacks, similar to the network with power 0.5. 90% of the largest connected component remains connected after removing 10% of the highest-degree nodes. 
+
+In short, the network with power 0.5 exhibits higher resistance to random attacks than the network with power 1.5, while both networks display high resilience to targeted attacks.
+
+
+## Exercise 3: Simulation of Simple and Complex Contagion
+
+### The strength of weak ties in simple contagion
+
+#### Question 10 (2 points): For the Highschool network, identify five edges which after deletion, there will be significant gain of the average path lengths of the network. In other words, if such five edges did not exist, the average path length of the network would increase significant. Provide your answer in the format of A-B, in which A and B are the node ID. Are they weak ties or strong ties?
+
+Yeah but after you identify the top five important edges, among those five edges how do you know find which one is a weak and which one is a strong tie. 
+
+
+
+```{r}
+# Compute Jaccard coefficients for all node pairs
+jaccard_coeff <- similarity(Highschool, method = "jaccard")
+
+# Compute the average Jaccard coefficient for the whole Highschool network
+avg_jaccard <- mean(jaccard_coeff)
+
+# Extract the indices of the nodes in the top five edges
+top_five_nodes <- lapply(top_five, function(x) which(V(Highschool)$name == x))
+top_five_node_indices <- unlist(lapply(top_five_nodes, function(x) as.numeric(x)))
+
+# Get Jaccard coefficients for five top edges
+top_five_jaccard <- jaccard_coeff[top_five_node_indices]
+
+# Print if the edges represent strong or weak ties
+for (i in 1:5) {
+  if (top_five_jaccard[i] > avg_jaccard) {
+    tie_strength <- "Strong"
+  } else {
+    tie_strength <- "Weak"
+  }
+  cat(top_five[i, 1], "-", top_five[i, 2], ": ", tie_strength, "\n")
+}
+```
+
+
+
+#### Question 11: Simulate the spread of simple contagion in the Highschool network (6 points):
+
+1)  Build a simple independent cascade (IC) model with the following characteristics:
+
+-   Each node in the network has two statuses: infected (value=1) or healthy (value =0);
+-   At Day 0, all the nodes in the network are healthy;
+-   At Day 1, an infected node (N0, node ID= S5) is introduced to the network;
+-   At the following days, all the nodes connecting to an infected node will have a chance of 0.15 (p=0.15) being infected.
+-   Once infected, the node will remain contagious and infected until the end of simulation.
+-   Model the contagion process for 4 weeks.
+
+2)  Apply the IC model to the Highschool network, record the number of newly infected people by day (i.e., newly confirmed cases by day) for further analysis.
+
+```{r}
+
+stopifnot(require(data.table))
+stopifnot(require(Matrix))
+
+calculate_value <- function(node, each_neighbors,Pprob){
+  return(each_neighbors[[node]][ which(runif(length(each_neighbors[[node]]), 0, 1)<=Pprob)]) #'runif' generates random number in R 
+}
+#This function:
+#1) searches the neighbors of contagious node;
+#2) To those who are connected to a contagious node, generates a random number and compare to the
+#probability of p, if random number<p, this node will be infected and return the value of 1
+
+IC<-function(node_seed,network,Pprob){
+  #prepare input for the 'calculate_value' function#
+  adj_matrix <- igraph::as_adjacency_matrix(network, type = 'both') 
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE)
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1]) #get the neigbhour list of each node 
+  nNode<-vcount(network)
+  node_status <- rep.int(0, nNode) #start from a healthy population
+  day_infected<-vector()#Total number of infected population 
+  new_infected <- list() # Record the ID of person getting infected at each time step 
+
+  day<-1 
+  node_status[as.numeric(node_seed)] <- 1 # infected(value=1) health(value=0) 
+  day_infected[day] <- sum(node_status )
+  new_infected[[day]]<-node_seed #The ID of the person infected in Day 1 (Patient Zero) 
+
+  #simulate the spread of virus within 4 weeks## 
+  for (day in c(2:28)){
+    ContagiousID<-which(node_status == 1) 
+    infectedID<-unlist(lapply(ContagiousID,calculate_value,each_neighbors,Pprob)) 
+    newinfectedID<-   setdiff(infectedID, which(node_status == 1)) 
+#Update the node status and other variables 
+    node_status[newinfectedID] <- 1 
+    day_infected[day] <- length(newinfectedID) 
+    new_infected[[day]]<-newinfectedID 
+    
+    day=day+1 
+  } 
+  
+  return(day_infected) #return the number of newly infected people by day 
+  #return(list(day_infected,new_infected)) #if you want to see the ID of infected ppl in each day, use this command instead 
+}
+
+
+# Set seed for reproducibility
+set.seed(697)
+
+# IC model hyperparameters
+p <- 0.15 #probability of infection
+nSim <- 100 #number of simulations
+nDays <- 28 #number of days to simulate
+node_seed <- which(V(Highschool)$name == "S5")  #infected node at day 1
+
+# Initialize results
+results <- matrix(0, ncol = nDays, nrow = nSim)
+
+# Run IC model nSim times
+for (i in 1:nSim) {
+  day_infected <- IC(node_seed, Highschool, p)
+  results[i,] <- day_infected
+}
+
+# Compute average results
+avg_results <- apply(results, 2, mean)
+
+#plot results
+plot(avg_results, type = "l", xlab = "Day", ylab = "Number of Infected Nodes")
+
+```
+
+
+
+
+#### Question 12: Now you are going to test the "strength of weak ties" in the simple contagion (6 points):
+
+1)  Delete the 5 edges that you have identified in Q11 from the Highschool network and form a new network (Highschool 2);
+
+```{r}
+# Get edge IDs for the top five edges
+top_five_ids <- as.numeric(sorted_ebc$ix[1:5])
+
+# Delete the top five edges from the Highschool network
+Highschool2 <- delete.edges(Highschool, top_five_ids)
+
+
+# Print the number of nodes and edges in the previous and new network
+cat("Number of nodes in Highschool 2 (new):", vcount(Highschool2), "\n")
+cat("Number of edges in Highschool 2 (new):", ecount(Highschool2), "\n")
+cat("\n")
+cat("Number of nodes in Highschool (old):", vcount(Highschool), "\n")
+cat("Number of edges in Highschool (old):", ecount(Highschool))
+```
+
+
+2)  Delete 5 strong ties from the Highschool network and form a new network (Highschool 3);
+
+```{r}
+# Compute edge betweenness centrality for Highschool network
+ebc <- edge_betweenness(Highschool)
+
+# Sort edges by edge betweenness centrality
+sorted_ebc <- sort(ebc, decreasing = TRUE, index.return = TRUE)
+
+# Get top five edges
+top_five <- head(sorted_ebc$ix, 5)
+
+# Convert edge names to numeric IDs
+edge_list <- get.edgelist(Highschool)
+top_five_ids <- apply(edge_list[top_five, ], 1, function(x) c(which(V(Highschool)$name == x[1]), which(V(Highschool)$name == x[2])))
+
+# Delete the top five edges from the Highschool network
+Highschool3 <- delete.edges(Highschool, top_five_ids)
+
+# Rename the nodes in the new network for convenience
+V(Highschool3)$name <- paste0("S", 1:vcount(Highschool3))
+```
+
+
+3)  Apply the IC models you developed in Q12 on the original Highschool network, Highschool2 and Highschool3. Record the number of newly infected people by day.
+4)  Generate a plot (with x-axis as Day, y-axis as the number of newly infected people by day) to compare the results from Step 3.
+
+
+```{r}
+# Run IC model on original Highschool network
+set.seed(697)
+
+# IC model hyperparameters
+p <- 0.15 #probability of infection
+nSim <- 100 #number of simulations
+nDays <- 28 #number of days to simulate
+node_seed <- which(V(Highschool)$name == "S5")  #infected node at day 1
+
+# Initialize results for Highschool2
+results_hs <- matrix(0, ncol = nDays, nrow = nSim)
+
+# Run IC model nSim times for Highschool2
+for (i in 1:nSim) {
+  day_infected_hs <- IC(node_seed, Highschool, p)
+  results_hs[i,] <- day_infected_hs
+}
+
+# Initialize results for Highschool2
+results_hs2 <- matrix(0, ncol = nDays, nrow = nSim)
+
+# Run IC model nSim times for Highschool2
+for (i in 1:nSim) {
+  day_infected_hs2 <- IC(node_seed, Highschool2, p)
+  results_hs2[i,] <- day_infected_hs2
+}
+
+# Compute average results for Highschool2
+avg_results_hs2 <- apply(results_hs2, 2, mean)
+
+# Initialize results for Highschool3
+results_hs3 <- matrix(0, ncol = nDays, nrow = nSim)
+
+# Run IC model nSim times for Highschool3
+for (i in 1:nSim) {
+  day_infected_hs3 <- IC(node_seed, Highschool3, p)
+  results_hs3[i,] <- day_infected_hs3
+}
+
+# Compute average results for Highschool3
+avg_results_hs3 <- apply(results_hs3, 2, mean)
+
+
+#plot results
+plot(avg_results_hs, type = "l", xlab = "Day", ylab = "Number of Infected Nodes", main = "Highschool")
+plot(avg_results_hs2, type = "l", xlab = "Day", ylab = "Number of Infected Nodes", main = "Highschool2")
+plot(avg_results_hs3, type = "l", xlab = "Day", ylab = "Number of Infected Nodes", main = "Highschool3")
+
+```
+
+
+5)  Recall the "strength of weak ties" from the lecture, do the results in Step 3&4 support such a claim and why?
+
+#### Question 13 (8 points): In the above exercises, the "strength of weak ties" are tested in a simplified IC model with a specific probability p. Do you think your observation in Q13 holds regardless of the contagiousness of the virus? To find out
+
+1)  Play around the probability p in the IC model. Change the value of p to high and low ends, run the IC model again on Highschool, Highschool 2 and Highschool 3, and see if you will observe different things (2 points).
+
+```{r}
+# Set seed for reproducibility
+set.seed(697)
+
+# IC model parameters
+p <- 0.05 # probability of infection
+nSim <- 100 # number of simulations
+nDays <- 28 # number of days to simulate
+node_seed <- which(V(Highschool)$name == "S5")  # infected node at day 1
+
+# initialize results
+results_p05 <- matrix(0, ncol = nDays, nrow = nSim)
+results_p15 <- matrix(0, ncol = nDays, nrow = nSim)
+results_p25 <- matrix(0, ncol = nDays, nrow = nSim)
+
+# run IC model with p = 0.05
+for (i in 1:nSim) {
+  # run IC model
+  day_infected <- IC(node_seed, Highschool, p)
+  # store results
+  results_p05[i,] <- day_infected
+}
+
+# calculate average results for p = 0.05
+avg_results_p05 <- apply(results_p05, 2, mean)
+
+# run IC model with p = 0.15
+p <- 0.15
+for (i in 1:nSim) {
+  # run IC model
+  day_infected <- IC(node_seed, Highschool, p)
+  # store results
+  results_p15[i,] <- day_infected
+}
+
+# calculate average results for p = 0.15
+avg_results_p15 <- apply(results_p15, 2, mean)
+
+# run IC model with p = 0.25
+p <- 0.25
+for (i in 1:nSim) {
+  # run IC model
+  day_infected <- IC(node_seed, Highschool, p)
+  # store results
+  results_p25[i,] <- day_infected
+}
+
+# calculate average results for p = 0.25
+avg_results_p25 <- apply(results_p25, 2, mean)
+
+
+# Find the maximum number of infected nodes observed in the simulations
+max_infected <- max(apply(results, 2, max))
+
+# Plot the results with adjusted y-axis limits
+plot(avg_results_p05, type = "l", xlab = "Day", ylab = "Number of Infected Nodes", col = "red", ylim = c(0, max_infected), lwd = 2)
+lines(avg_results_p15, col = "purple", lwd = 2)
+lines(avg_results_p25, col = "black", lwd = 2)
+legend("topright", legend = c("p = 0.05", "p = 0.15", "p = 0.25"), col = c("red", "purple", "black"), lty = 2, lwd = 2)
+
+```
+
+
+2)  The above IC model is a simplified version of the SIR model. In the SIR model, node have three status:
+
+-   Each node in the network has three statuses:
+-   At Day 0, all the nodes in the network are ;
+-   At Day 1, an infectious node (N0, node ID= S5) is introduced to the network;
+-   At the following days, all the nodes connecting to the infectious node will have a chance of 0.15 (p=0.15) being infected.
+-   Every infected node will remain infectious for 3 days, i.e., only the infected nodes activated from the past 3 days can transmit the virus to their neighbours. After that, their status becomes Recovered, which cannot be either Infectious or Susceptible again.
+-   Model the contagion process for 4 weeks.
+
+
+```{r}
+# SIR model
+SIR <- function(node_seed, network, Pprob, infectious_period) {
+  adj_matrix <- igraph::as_adjacency_matrix(network, type = 'both')
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE)
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1])
+  nNode <- vcount(network)
+  
+  node_status <- rep.int(0, nNode) # 0: Susceptible, 1: Infectious, 2: Recovered
+  days_infected <- rep.int(0, nNode)
+  day_infected <- vector()
+  new_infected <- list()
+
+  day <- 1
+  node_status[as.numeric(node_seed)] <- 1
+  days_infected[as.numeric(node_seed)] <- 1
+  day_infected[day] <- sum(node_status == 1)
+  new_infected[[day]] <- node_seed
+
+  for (day in c(2:28)) {
+    ContagiousID <- which(node_status == 1 & days_infected < infectious_period)
+    infectedID <- unlist(lapply(ContagiousID, calculate_value, each_neighbors, Pprob))
+    newinfectedID <- setdiff(infectedID, which(node_status != 0))
+
+    node_status[newinfectedID] <- 1
+    days_infected[newinfectedID] <- days_infected[newinfectedID] + 1
+    day_infected[day] <- length(newinfectedID)
+    new_infected[[day]] <- newinfectedID
+
+    recoveredID <- which(node_status == 1 & days_infected >= infectious_period)
+    node_status[recoveredID] <- 2
+    days_infected[recoveredID] <- 0
+
+    days_infected[node_status == 1] <- days_infected[node_status == 1] + 1
+    day <- day + 1
+  }
+
+  return(day_infected)
+}
+
+# Parameters
+infectious_period <- 3
+nSim <- 100 #number of simulations
+nDays <- 28 #number of days to simulate
+node_seed <- which(V(Highschool)$name == "S5")  #infected node at day 1
+p <- 0.15 #probability of infection
+
+# Initialize results
+results_SIR <- matrix(0, ncol = nDays, nrow = nSim)
+
+# Run SIR model nSim times
+for (i in 1:nSim) {
+  day_infected <- SIR(node_seed, Highschool, p, infectious_period)
+  results_SIR[i,] <- day_infected
+}
+
+# Calculate average results
+avg_results_SIR <- apply(results_SIR, 2, mean)
+
+# Plot results
+plot(avg_results_SIR, type = "l", xlab = "Day", ylab = "Number of Infected Nodes")
+
+```
+
+
+
+
+
+#### Question 14 (5 points): An arbitrary assumption about the thresholds of each node in the Highschool network has been made, which can be found in the "Highschool_network_att.csv". Build a threshold model according to the above model description and the predefined thresholds of each node, answer the following questions.
+
+#### 1) By seeding 5 nodes (ID=59,63,91,92,99), how many people in the network can be activated?
+
+```{r}
+
+stopifnot(require(data.table))
+stopifnot(require(Matrix))
+
+
+# Retrieve node attributes
+highschool_att <- fread("Highschool_network_att.csv")
+
+calculate_adoptedNei <- function(node, node_status, each_neighbors){
+ return(mean(node_status[each_neighbors[[node]]] == 1)) ### to calculate the percentage of adopted neigbhours
+}
+
+
+# Threshold model function
+ThModel <- function(node_seed, network, att_df) {
+  # Prepare input for 'calculate_adoptedNei' function
+  adj_matrix <- as_adjacency_matrix(network, type = "both")
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE)
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1]) #get the neigbhour list of each node
+  
+  # Initialize variables
+  nNode <- vcount(network)
+  node_status <- rep.int(0, nNode) ##percentage of adopted neighbours
+  neighbour_status <- rep.int(0, nNode)
+  new_infected <- list()
+  day_total_infected <- rep(0, 28) ### Total number of active people by end of each day
+  
+  ### Day 1 ####
+  day <- 1
+  node_status[node_seed] <- 1
+  new_infected[[day]] <- node_seed
+  day_total_infected[day] <- sum(node_status == 1)
+  ####
+  
+  # Iterate through remaining days
+  for (day in 2:28) {
+    NotAdopted <- which(node_status == 0)
+    Adopted <- which(node_status == 1)
+    
+    # Calculate neighbour status for not adopted nodes
+    neighbour_status[NotAdopted] <- unlist(lapply(NotAdopted, calculate_adoptedNei, node_status, each_neighbors))
+    
+    # Find nodes to be newly infected
+    threshold_vals <- att_df$threshold[match(NotAdopted, att_df$id)]
+    new_infected[[day]] <- NotAdopted[neighbour_status[NotAdopted] > threshold_vals * degree(network, NotAdopted)]
+    
+    # Update node statuses
+    node_status[new_infected[[day]]] <- 1 #update the staus to 1 for those newly adopted
+    day_total_infected[day] <- sum(node_status)
+    
+    day <- day + 1
+  }
+  
+  # Return total number of activated nodes for each day and list of new activated nodes on each day
+  return(list(day_total_infected, new_infected))
+}
+
+
+# Set seed nodes
+node_seed <- c(59, 63, 91, 92, 99)
+
+# Get threshold values for each node
+thresholds <- highschool_att$threshold
+
+# Apply threshold model
+result <- ThModel(node_seed, Highschool, highschool_att)
+
+# Calculate total number of activated nodes
+activated_nodes <- sum(unlist(result[[2]]))
+
+# Print result
+cat("By seeding 5 nodes, a total of", activated_nodes, "nodes in the network can be activated.\n")
+
+```
+
+
+
+```{r}
+### ANSWER FOR QUESTION 14 BUILDING THRESHOLD MODEL ###  
+#------------------------------------------------------#
+
+
+#THRESHOLD MODEL CREATION 
+
+
+stopifnot(require(data.table))
+stopifnot(require(Matrix))
+
+calculate_adoptedNei <- function(node, node_status, each_neighbors){
+  return(mean(node_status[each_neighbors[[node]]] == 1)) #Calculation of the percentage of adopted neigbhours
+}
+
+ThModel<-function(node_seed,network,threshold){ 
+  
+  #Preparing input for the 'calculate_value' function
+  
+  adj_matrix <- igraph::as_adjacency_matrix(network, type = 'both')
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE)
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1]) #Get the neighbors list of each node
+  
+  nNode<-vcount(network)
+  node_status <- rep.int(0, nNode) 
+  neighbour_status<-rep.int(0, nNode)  #Percentage of adopted neighbors
+  new_infected <- list()
+  day_total_infected <- rep(0,28) #Total number of active people by end of each day
+  
+  
+  ####### Day 1 #######
+  day <- 1
+  node_status[as.numeric((node_seed))] <- 1 
+  new_infected[[day]] <-node_seed
+  day_total_infected[day]=sum(node_status == 1) 
+  ###############################################
+  
+  
+  #Running the simulation for 28 days
+  for (day in c(2:28)){
+    NotAdopted <- which(node_status == 0)
+    Adopted <- which(node_status == 1)
+    
+    neighbour_status[NotAdopted] <- unlist(lapply(NotAdopted, calculate_adoptedNei, node_status, each_neighbors))
+    
+    new_infected[[day]] <- setdiff(which(neighbour_status > threshold), Adopted)
+    node_status[new_infected[[day]]] <- 1  #Updating the status to 1 for those newly adopted
+    day_total_infected[day] <- sum(node_status)
+    
+    day <- day + 1
+  }
+  
+  return(list(day_total_infected,new_infected))
+}
+```
+
+
+```{r}
+
+#MODEL EXECUTION
+
+#Specifying the nodes which will be activated in day 1
+seed_nodes <- c(59, 63, 91, 92, 99)
+
+#Specifying the number of nodes in the network
+n_thresholds <- 122
+
+#Randomly generating threshold values in between 0 and 1
+threshold_values <- runif(n_thresholds, min = 0, max = 1)
+
+
+#Executing threshold model by providing the high school network and the randomly generated threshold values
+results_thresholdmodel <- ThModel(node_seed = seed_nodes, 
+                                  network = highschool,
+                                  threshold = threshold_values)
+```
+
+
+```{r}
+#RESULTS 
+
+
+#Results of the simulation 
+results_thresholdmodel[[1]]
+
+
+#Number of activated nodes in the simulation 
+total_activated <- results_thresholdmodel[[1]][length(results_thresholdmodel[[1]])]
+```
+
+
+```{r}
+
+#Checking which nodes are activated day by day
+results_thresholdmodel[[2]][1:9]
+```
+
+ANSWER - QUESTION 14 - SECTION 1
+
+------ 1) By seeding 5 nodes (ID=59,63,91,92,99), how many people in the network can be activated?
+
+=> Based on the output we have generated, the value of total_activated is 17. So, by seeding 5 nodes (ID=59,63,91,92,99), a total of 17 people in the network can be activated by the end of the simulation (28 days).
+
+
+```{r}
+#WE WANTED TO USE A COMMUNITY DETECTION ALGORTHM AND VISUALIZE IT TO DETECT TE COMMUNITIES WHICH ARE MENTIONED IN THE QUESTION TO MAKE THE ANALYSIS CLEAR FOR OURSELVES.
+
+
+#Applying the Louvain community detection algorithm
+louvain_communities_beefcampaign <- cluster_louvain(highschool)
+
+#Extracting node IDs for each community
+community_node_ids <- lapply(1:max(louvain_communities_beefcampaign$membership), function(x) {
+  return(which(louvain_communities_beefcampaign$membership == x))
+})
+
+#Printing node IDs for each community
+for (i in seq_along(community_node_ids)) {
+  cat("Community", i, ": ", community_node_ids[[i]], "\n")
+}
+
+
+#Defining colors for the communities
+community_colors <- rainbow(max(louvain_communities_beefcampaign$membership))
+
+#Creating a color vector for the nodes based on their community membership
+node_colors <- community_colors[louvain_communities_beefcampaign$membership]
+
+#Ploting the network with nodes colored based on their communities
+#Defining node IDs to be labeled
+label_nodes <- c(59, 63, 91, 92, 99)
+
+#Preparing a vector with labels for the nodes
+vertex_labels <- sapply(1:vcount(highschool), function(x) if (x %in% label_nodes) as.character(x) else "")
+
+#Ploting the network with nodes colored based on their communities and specific nodes labeled
+tk_id <- tkplot(highschool,
+                vertex.color = node_colors,
+                vertex.size = 5,
+                vertex.label = vertex_labels,
+                vertex.label.color = "black",
+                vertex.label.font = 2,
+                vertex.label.cex = 0.8,
+                edge.arrow.size = 0.5,
+                canvas.width = 800,
+                canvas.height = 800)
+```
+
+
+ANSWER - QUESTION 14 - SECTION 2
+
+#### Use the “width of a bridge” from the lecture to explain why the contagion fails to reach the following two communities: a) the one consisted of Node 55, 107, 93, 109, 80, 28; b) the one consisted of Node 110, 39, 10, 1, 50, 106.
+
+=> The term "width of a bridge" describes the quantity of links that connect two communities in a network. Small bridge widths indicate that there are few links between the communities, which makes it more difficult for ideas or behaviors to move across them. It means that either the threshold values for the nodes in these communities are too high to be influenced by their neighbors, or the width of the bridges linking these communities to the rest of the network is small, for the contagion to fail in reaching the two specified communities .
+
+
+=> Community: 55, 107, 93, 109, 80, and 28:
+
+We can observe from the simulation's output that Node 93 started to adopt the campaign on Day 3. ([[3]]). This suggests a link between this neighborhood and the rest of the network. The other nodes in this community (55, 107, 109, 80, and 28) have not adopted the behavior for all of the simulation. This shows that either these nodes' threshold values are too high to be affected by their adopted neighbors, or the connections between them and the rest of the network are weak (small bridge width).
+
+=> Community:  110, 39, 10, 1, 50, and 106:
+
+We can observe from the simulation's output that none of the community's nodes have taken on the behavior. This shows that the connections between this community and the rest of the network are very weak, making it difficult for the behavior to be spread into this community.
+
+In conclusion, the contagion is prevented from spreading to the mentioned communities by the narrow bridges that connect them to the rest of the network or the nodes' high threshold values that prevent them from adopting the behavior or the campaign in the highschool.
+
+!!! Since we have assigned the the threshold values completley randomly to the 122 nodes we have in the network our interpretation is in this way, we think for those two communities we can not have high threshold values for all of them since the values are assigned at random. So the main point is that those 2 communities have small width of bridge so that the behavior can not be spread from the adopted people to those communities. In order to analyze the this we wanted to visualize the highschool network by applying community detection algorithm to check if those nodes are in two different communities. And after that we have checked the edges between the initially adopted nodes and the nodes in those communities. The visualization is interactive when you execute the code another ineteractive window pops up and you can play with the network:) 
+
+
+
+##### Question 15 (6 points) : Apply the empirical distribution of the threshold of students in this class to the Highschool network, and answer the following questions:
+
+1)  How are you going to do it? Explain your method into steps.
+2)  What are the limitations of your method? What procedures are you going to take to address such limitations?
+3)  After you apply the empirical threshold distribution to the Highschool network, by using Node ID=59,63,91,92,99 as seeds, how many people in the network can be activated?
+
+Question 16 (3 points) : Search the application cases of threshold model from literatures or other online source, chose one case and explain how they can get the threshold "right" for their model. (please provide the details of the literature or other online source that you are citing.)
+
+---- Question 15 (6 points):
+
+Threshold model relies heavily on the notion of “threshold” in human decision-making. However, approximating the real thresholds of a population is difficult, if not impossible. Therefore, assumption about the threshold has to be made. In Question 14, the threshold distribution is decided arbitrarily, which follows a uniform distribution from 0 to 1. In the lecture, we did a small survey to ask for your threshold to join the “once-a-week-beef” campaign. It resulted in an empirical distribution of the threshold of students in this class. Question 15 (6 points): Apply the empirical distribution of the threshold of students in this class to the Highschool network,  and answer the following questions:
+
+  1) How are you going to do it? Explain your method into steps.
+
+  2)  What are the limitations of your method? What procedures are you going to take to address such limitations?
+
+  3) After you apply the empirical threshold distribution to the Highschool network, by using Node ID=59,63,91,92,99 as seeds, how many people in the network can be activated?
+
+
+```{r}
+
+#IMPORTING SURVEY DATA 
+survey_thresholds <- read.csv("C:/Users/Uygar TALU/Desktop/Question15_OnceABeefThreshold.csv")
+survey_thresholds
+```
+
+
+```{r}
+
+#CALCULATING PROBABILITIES - ASSGINING THRESHOLD VALUES - SUPRESSING THRESHOLD VALUES HIGHER THAN 10
+
+#Specifying the number of nodes in High school network
+n_nodes <- 122
+
+#Calculating threshold distribution probabilities
+threshold_prob <- survey_thresholds$NumberOfStudents / sum(survey_thresholds$NumberOfStudents)
+
+#Random sampling for the rest nodes in the network and assigning threshold values by considerin the cumulative distribution
+expanded_thresholds <- sample(survey_thresholds$ï..Threshold,
+                              n_nodes,
+                              replace = TRUE,
+                              prob = threshold_prob)
+
+#Converting all the values to numeric format and supressing the threshold values higher than 10
+expanded_thresholds <- as.numeric(ifelse(expanded_thresholds == ">=10", 10, expanded_thresholds))
+```
+
+```{r}
+#SIMULATION EXECUTION
+
+#Setting the initial nodes which are going to be adopted on the first day
+seed_nodes <- c(59, 63, 91, 92, 99)
+
+#Applying the Threshold model simulation
+results_thresholdmodel_emprical_dist <- ThModel(node_seed = seed_nodes, 
+                                                network = highschool,
+                                                threshold = expanded_thresholds)
+```
+
+
+```{r}
+#RESULTS FOR EMPRICAL DISTRIBUTION BASED THRESHOLD MODEL SIMULATION
+
+#Checking all the results
+results_thresholdmodel_emprical_dist[[1]]
+
+#How many nodes we are able to activate with the new approach?
+total_activated_emprical_dist <- results_thresholdmodel_emprical_dist[[1]][length(results_thresholdmodel_emprical_dist[[1]])]
+
+```
+
+
+```{r}
+#RESULTS
+
+#Which nodes are activated day by day?
+results_thresholdmodel_emprical_dist[[2]][1:9]
+```
+
+
+```{r}
+#WHAT HAPPENED?
+
+#Comparison between previous randomly generated and assigned threshold model and the model with emprical distribution 
+cat("Number of activated nodes in emprical distribution:\n")
+print(total_activated_emprical_dist)
+cat("\n")
+cat("Number of activated nodes in random threshold distribution:\n")
+print(total_activated)
+
+
+```
+
+ANSWER - QESTION 15 - SECTION 1
+
+------ 1) How are you going to do it? Explain your method into steps.
+
+
+=> Our approach depends on 4 steps. First of all it important to address what is emprical distribution. Emprical distribution is the distribution of the observed survey data which we have in hand. So we have the survey data about the campaign and also we have threshold values for people about accepting or being adopted the campaign. So depending on these for the total of 37 participants or the students we can make our simulation more accurate and better because we can use those threshold distribution in other words the emprical distribution in our highschool model and try to push the model or the simulation closer to what would happen in reality. 
+
+We applied the emprical distribution by following these 3 steps.
+
+
+Step 1: Calculating the probability distribution of the threshold values: In order to be able to expand the emprical distribution of threshold values to the whole network, it is clear that we need to make assignments of depending on ranges and those ranges should be proportional in terms of distribution of threshold values and the number of students. Depending on this idea we calculated the thresholds for each threshold value by considerint the total number of students and the number of students for that specific threshold value. Depending on this calculationwe had the probabilitites for each threshold value. In the second wtep where we will xplain how we expanded the distribution to apply the emprical distribution, these probabilities will play important role on assigning the the threshold values for the whole network. 
+
+
+Step 2: Expanding the threshold values: Since we have threshold values for 37 students in our survey data and there are 122 nodes in in the Highschool network, we need to expand the main or core struture of the survey data we have. We can think this also like this, we know the structure and threshold values for 37 student but we need to expand the core structure like we had the data for 122 students. We thought that this can be the only way that the emprical distribution of the threshold values can be evaluated and used within the highschool network. 
+
+- How we did it? => First we have calculated the total number of students in the survey data which we need to assign the threshold values to, and then we randomly assigned the threshold values based on the probability distribution. In more detail, first we calculate the probability values for each NuberOfStudents column and then generate random numbers for the rest of nodes in the network(122 - survey data). We assign those random numbers by considering the cumulative probabilities of the threshold values. 
+
+
+Step 3: Replacement of thresholds higher than 10: The last thing was the threshold values higher than 10. They are specified as ">=10" withing the survey dataset. So this is uncertain for us because we need to specify those people to some level of threshold value but we do not have any other relevant information about those people. Depending on this we suppressed the the threshold values higher than 10 to 10. 
+
+
+=> After we took these steps we had the assigned threshold values for the 122 node Highscool network and the assignment or those values within the network depends on the emprical distibution from the survey data. Which indicates that we tries to expand the emprical or observed data about the campaign and the related threshold values to out network model. This means we tried to push the simulation closer to reality. Because the most imporant part is knowing the true or real threshold values. If we can achieve that up to some degree that good for us. Since the network depends on the emprical distribution of threshold values we used the threshold simulation model function to execute the simulation and analzyed the results.
+
+
+ANSWER - QESTION 15 - SECTION 2
+
+----- 2)  What are the limitations of your method? What procedures are you going to take to address such limitations?
+
+When we consider our approach we have 3 important limitations and 3 possible solutions. 
+
+=> Limitation 1: The survey data is small in terms of number of participant students, so that they may not be completely representative for the entire highschool network. Having small number of data for the threshold values may lead us wrong and lead to biased results in the simulation
+=> Procedure to address limitation: To get a more accurate sample of threshold values, conduct a broader survey with more participants from the Highschool network. If this isn't feasible, we can think about alternative techniques to estimate the threshold values or investigate sensitivity analysis to learn how various threshold distributions might impact the outcomes.
+
+
+=> Limitation 2: The other limitation of our approach must be equalizing the threshold values higher than 10 to 10. This methos may not represent the threshold values higher than 10 in a healthy way. Also this situation effects the real or true threshold distribution and effect the simulation process. 
+=> Procedure to address limitation: We can investigate the reasons for the higher value thresholds. They can be outliers or they can be mistakenly specified threshold values by the participant. We can also collect the real vaues of the thresholds which are higher than 10 and depending on the outlier detection methods we can remove some of them and keep the ones which show important insights. 
+
+
+
+=> Limitation 3:  The random sampling method used to expand the threshold values may not accurately represent the true distribution of threshold values in the Highschool network. The main reason is that in step 2 we generate random values for the network and assigne them depending on the cumulative probabilities of threshold values. Those randomly generated values may distort the real distribution. There may be other values for those nodes in the network which can be assigned to the nodes depending on the cumulative probabilities of threshold values. 
+=> Procedure to address limitation: To overcome or decrease the negative effects of this approach we can consider the stratified sampling or the bootsstrapping in the threshold generation for the rest of the nodes in the highschool network. 
+
+
+ANSWER - QESTION 15 - SECTION 1
+
+
+-----  3) After you apply the empirical threshold distribution to the Highschool network, by using Node ID=59,63,91,92,99 as seeds, how many people in the network can be activated?
+
+=> In the previos simulation where we generated the threshold values completely  at random we achieved to activate 17 people or nodes in the network. With the new simulation where we have tried to apply the emprical distribution for the thresholds, we achieved to activate 33 people or nodes in the highschool network.
+
+#------------------------------------------------------------------------------------------------------
+
+
+##### Question 16 (3 points) :
+
+- Search the application cases of threshold model from literatures or other online source, chose one case and explain how they can get the threshold “right” for their model. (please provide the details of the literature or other online source that you are citing.)
+
+
+
+ANSWER - QUESTION 16
+
+=> We have searched the literatures for the application cases of threshold model and found 3 interesting studies which are, 
+
+1 - Social media influence on purchasing behavior:
+Risselada, H., Verhoef, P. C., & Bijmolt, T. H. (2014). Dynamic effects of social influence and direct marketing on the adoption of high-technology products. Journal of Marketing, 78(2), 52-68.
+
+
+2 - Political behavior and opinion formation:
+Huckfeldt, R., Johnson, P. E., & Sprague, J. (2004). Political disagreement: The survival of diverse opinions within communication networks. Cambridge University Press.
+
+
+3 - Contagion of collective action in social movements:
+Oliver, P. E., Marwell, G., & Teixeira, R. (1985). A theory of the critical mass. I. Interdependence, group heterogeneity, and the production of collective action. American Journal of Sociology, 91(3), 522-556.
+
+
+=> We have reviewed 3 of the studies and found that the approach used in Social media influence on purchasing behavior study was interesting and it was sometihng that we did not practice in our course, so that decided to focus on the first study. 
+
+=> This study focuses on the dynamic effects on the social influence and direct marketing on the adoption of high technology products. We can also simplfy it with this question, How does social influence and direct marketing effect the adoption or usage of high technology products. They focused more on the usage or adoption of mobile phone models by considering the behavior of friends and targeted direct advertisements. The authors focused on the Bayesian estimation approach to be able to determine the individual-level threshold values within the network. Since Bayesian approach combines prior knowledge with observed data to reproduce updated estimates. In other words, they first consider the prior beliefs about the threshold values for the individuals and after they consider the observed data updated those threshold values. In this context the prior knowledge acts as a prior information about the specific person or the node within the network. The prior knowledge or the information consist of information about the node's past adoption behavior, demographic characteristics, and the number of friends who already adopted the new mobile phone models. So basically in the in the first component of the model authors focus on, "How was the adoption behavior of the node?", "What are the Demographic characteristics like income level, ag" and "What is the number of friends who already adopted new mobile phone of the specific node in the network". Within the Bayesian model authors tried to generate the prior distribution of threshold values for the individuals by depending on the prior knowledge or information we have mentioned above. So this prior distribution shows the initial beliefs of the authors on what should be the threshold values. It is used as a reference basis. In the second part authors try to generate a new distribution for the threshold values, but this time they incorporate the observed data in order to introduce individual's observed adoption behavior. Up until now they have the prior distribution and at this step they create posterior distribution for threshold values by using the observed data. The creation of posterior distribution depends on the likelihood of the observed data. So this means that authors update their beliefs about threshold values for each individual by also focusing on the observed data and the likelihood of the data. In mathematical terms we can express "updating beliefs about threshold values" as the posterior probability of a hypothesis (in this case, the threshold value) given the observed data is proportional to the prior probability of the hypothesis multiplied by the likelihood of the observed data given the hypothesis.  Mathematically, this can be expressed as, Posterior Probability ∝ Prior Probability × Likelihood So they focus on what could happen and then they focus what really happened and update the thresholds by depending on the observed data. As a result, in the borders of Bayesian approach authors use prior knowledge to generate prior probailities, and by using prior probabilities they generate the prior distribution. Conversly they focus on the posterior knowledge that is observed data to generate posterior probabilities and by dependin on that they generate the posterior distribution for the threshold values of each individual within the network. The key point or the outcome of this model on determining the threshold values is that, authors can capture the "Inherent Heterogenity" in the threshold values across the individuals. This part is very important on understanding the social influence and the direct marketing on adoption of new high - technology products.     
+
+#-------------------------------------------------------------------------------------------------------
+
+
+## EXERCISE 4: INFLUENCE MAXIMIZATION
+
+##### (Question 17, 5 points): 
+
+In the lecture, we discussed a few heuristics for the influence maximization problem in social network.  Apply degree heuristics and betweenness heuristics to the IC model you have developed in Question 11 (! Please change the initially infected node to S107!). Answer the following questions (Question 17, 5 points): 
+
+  1) You can immunize 3 nodes in the network, which after immunization, will never spread the virus to other connected nodes. According to degree heuristics and betweenness heuristics, which 3 nodes should be immunized in order to contain the virus?
+
+  2) Immunize the 3 nodes suggested by degree heuristics and betweenness heuristics, respectively, which heuristic provides the better outcome regarding a) the final activated number of people and b) flattening the daily infection curve (please provide figure in your answer)?
+
+  3) Do you think the observation in 2) (i.e., degree heuristic preforms better than betweenness heuristics, or the opposite) is sensitive to a) the network structure and b) parameter in the IC model? And Why?
+
+(Important note: In Question 12, the initially infected node is S5. Please change it to S107 to answer Question 18. In other words, at Day 1, an infected node (N0, node ID= S107) is introduced to the network.)
+
+```{r}
+#DEFINING FUNCTION FOR INDEPENDET CANCADE MODEL
+
+stopifnot(require(data.table))
+stopifnot(require(Matrix))
+
+calculate_value <- function(node, each_neighbors,Pprob){
+  return(each_neighbors[[node]][ which(runif(length(each_neighbors[[node]]), 0, 1)<=Pprob)])
+  #'runif' is a function to generate random number in R
+}
+```
+
+```{r}
+# Defining a function to simulate the spread of simple contagion using the independent cascade model
+simulate_contagion_IC <- function(node_seed, network, Pprob){
+  
+  # Prepare input for the 'calculate_value' function
+  adj_matrix <- igraph::as_adjacency_matrix(network, type = 'both') # Get the adjacency matrix of the network
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE) # Get the indices of all edges in the network
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1]) # Get the neighbour list of each node
+  
+  nNode <- vcount(network) # Get the number of nodes in the network
+  node_status <- rep.int(0, nNode) # Create a vector to store the infection status of each node
+  day_infected_sum <- numeric(28) # Create a vector to store the total number of newly infected people by day
+  new_infected_all <- vector(mode="list", length=28) # Create a list to store the ID of person getting infected at each time step
+  
+  # Simulate the spread of virus within 4 weeks, 100 times
+  for (i in 1:100){
+    # Set the initial condition at Day 1
+    node_status <- rep.int(0, nNode) # Reset the infection status of all nodes to 0
+    node_status[as.numeric(node_seed)] <- 1 # Set the seed node to be infected
+    day_infected <- numeric(28) # Create a vector to store the number of newly infected people by day
+    day_infected[1] <- sum(node_status ) # Record the number of infected people in Day 1
+    new_infected <- list() # Create a list to store the ID of person getting infected at each time step
+    new_infected[[1]] <- node_seed # Record the ID of the person infected in Day 1 (Patient Zero)
+    
+    for (day in c(2:28)){  
+      # Get the ID of all contagious nodes
+      ContagiousID <- which(node_status == 1) 
+
+      # Calculate the ID of all nodes that will be newly infected in the current day
+      infectedID <- unlist(lapply(ContagiousID, calculate_value, each_neighbors, Pprob))
+      newinfectedID <- setdiff(infectedID, which(node_status == 1))
+
+      # Update the node status and other variables
+      node_status[newinfectedID] <- 1
+      day_infected[day] <- length(newinfectedID)
+      new_infected[[day]] <- newinfectedID
+    }
+    
+    # Update the cumulative counts
+    day_infected_sum <- day_infected_sum + day_infected
+    new_infected_all <- lapply(seq_along(new_infected_all), function(i) c(new_infected_all[[i]], new_infected[[i]]))
+  }
+  
+  # Return the mean number of newly infected people by day 
+  return(day_infected_sum/100)
+}
+```
+
+
+```{r}
+#IDENTIFYING THE NODES ACCORDING TO THE DEGREE AND BETWEENNES HEURISTICS
+
+#Calculating degree centrality 
+degree_cent_infmax <- degree(highschool)
+
+#Top 3 nodes with highest degree centrality
+top3_degreecent_highschool <- order(degree_cent_infmax, decreasing = TRUE)[1:3]
+
+#Calculating betweennes centrality 
+betweennes_cent_infmax <- betweenness(highschool)
+
+#Top 3 nodes with highest betweennes centrality
+top3_betweenness_highschool <- order(betweennes_cent_infmax, decreasing = TRUE)[1:3]
+
+#Results
+cat("Top 3 nodes by degree centrality:\n")
+print(top3_degreecent_highschool)
+
+cat("\nTop 3 nodes by betweenness centrality:\n")
+print(top3_betweenness_highschool)
+```
+
+
+```{r}
+#EXECUTION OF IC MODEL SIMULATION ON ORIGINAL NETWORK - We wanted to use this as reference point
+
+#Specifying the new seed node
+seed_node = "107"
+
+#Simulation on original network - Since the infectionesness probability is not specified in the question we decided to use ti as in the question 11 as %15
+IC_model_simulation <- simulate_contagion_IC(node_seed=seed_node,
+                                             network = highschool,
+                                             Pprob = 0.15)
+```
+
+
+```{r}
+immunized_degree_highschool <- delete.vertices(highschool, top3_degreecent_highschool)
+immunized_degree_highschool
+```
+
+
+```{r}
+immunized_betweennes_highschool <- delete.vertices(highschool, top3_betweenness_highschool)
+immunized_betweennes_highschool
+```
+
+
+```{r}
+#EXECUTION OF IC MODELS SIMULATION ON ORIGINAL NETWORK - NETWORKS WİTHOUT DEGREE AND BETWEENNES HEURISTICS 
+
+#Specifying the new seed node
+seed_node = "107"
+
+#Simulation on original network - Since the infectionesness probability is not specified in the question we decided to use ti as in the question 11 as %15  - We wanted to use this as reference point
+IC_model_simulation <- simulate_contagion_IC(node_seed=seed_node,
+                                             network = highschool,
+                                             Pprob = 0.15)
+
+
+#Simulation on the highschool network without the degree heuristic
+IC_sim_immunized_degree_result <- simulate_contagion_IC(node_seed = seed_node, 
+                                                        network = immunized_degree_highschool, 
+                                                        Pprob = 0.15)
+
+#Simulation on the highschool network without the betweennes heuristic
+IC_sim_immunized_betweennes_result <- simulate_contagion_IC(node_seed = seed_node, 
+                                                            network = immunized_betweennes_highschool, 
+                                                            Pprob = 0.15)
+```
+
+
+```{r}
+#RESULTS FOR THE SIMULATIONS 
+
+cat("Final activated people for original network:", sum(IC_model_simulation), "\n")
+cat("Final activated people for degree heuristic:", sum(IC_sim_immunized_degree_result), "\n")
+cat("Final activated people for betweenness heuristic:", sum(IC_sim_immunized_betweennes_result), "\n")
+```
+
+
+```{r}
+#PLOTTING DAILY INFECTION CURVES
+
+# Plot daily infection curve
+plot(1:28, IC_model_simulation, type = "l", col = "green", ylim = range(c(IC_model_simulation, IC_sim_immunized_degree_result, IC_sim_immunized_betweennes_result)), xlab = "Days", ylab = "New Infections", main = "Daily Infection Curve")
+lines(1:28, IC_sim_immunized_degree_result, col = "red")
+lines(1:28, IC_sim_immunized_betweennes_result, col = "blue")
+legend("topright", legend = c("Original Network", "Degree Heuristic", "Betweenness Heuristic"), col = c("black", "red", "blue"), lty = 1, bty = "n")
+```
+
+
+```{r}
+#EXECUTION OF IC SIMULATION WITH DIFFERENT CONTAGION PROBABILITIES
+
+#3 networks with 3 probabilities as 0.5
+IC_model_simulation_0.5 <- simulate_contagion_IC(node_seed=seed_node,
+                                             network = highschool,
+                                             Pprob = 0.5)
+IC_sim_immunized_degree_result_0.5 <- simulate_contagion_IC(node_seed = seed_node, 
+                                                        network = immunized_degree_highschool, 
+                                                        Pprob = 0.5)
+IC_sim_immunized_betweennes_result_0.5 <- simulate_contagion_IC(node_seed = seed_node, 
+                                                            network = immunized_betweennes_highschool, 
+                                                            Pprob = 0.5)
+
+#3 networks with 3 probabilities as 0.8
+IC_model_simulation_0.8 <- simulate_contagion_IC(node_seed=seed_node,
+                                             network = highschool,
+                                             Pprob = 0.8)
+IC_sim_immunized_degree_result_0.8 <- simulate_contagion_IC(node_seed = seed_node, 
+                                                        network = immunized_degree_highschool, 
+                                                        Pprob = 0.8)
+IC_sim_immunized_betweennes_result_0.8 <- simulate_contagion_IC(node_seed = seed_node, 
+                                                            network = immunized_betweennes_highschool, 
+                                                            Pprob = 0.8)
+
+#3 networks with 3 probabilities as 0.15
+IC_model_simulation_0.15 <- simulate_contagion_IC(node_seed=seed_node,
+                                             network = highschool,
+                                             Pprob = 0.15)
+IC_sim_immunized_degree_result_0.15 <- simulate_contagion_IC(node_seed = seed_node, 
+                                                        network = immunized_degree_highschool, 
+                                                        Pprob = 0.15)
+IC_sim_immunized_betweennes_result_0.15 <- simulate_contagion_IC(node_seed = seed_node, 
+                                                            network = immunized_betweennes_highschool, 
+                                                            Pprob = 0.15)
+
+#Results
+cat("Final activated people for original network with 0.5 :", sum(IC_model_simulation_0.5), "\n")
+cat("Final activated people for degree heuristic with 0.5 :", sum(IC_sim_immunized_degree_result_0.5), "\n")
+cat("Final activated people for betweenness heuristic with 0.5:", sum(IC_sim_immunized_betweennes_result_0.5), "\n")
+cat("Final activated people for original network with 0.8 :", sum(IC_model_simulation_0.8), "\n")
+cat("Final activated people for degree heuristic with 0.8 :", sum(IC_sim_immunized_degree_result_0.8), "\n")
+cat("Final activated people for betweenness heuristic with 0.8:", sum(IC_sim_immunized_betweennes_result_0.8), "\n")
+cat("Final activated people for original network with 0.15 :", sum(IC_model_simulation_0.15), "\n")
+cat("Final activated people for degree heuristic with 0.15 :", sum(IC_sim_immunized_degree_result_0.15), "\n")
+cat("Final activated people for betweenness heuristic with 0.15:", sum(IC_sim_immunized_betweennes_result_0.15), "\n")
+
+```
+
+ANSWER - QUESTION 17 SECTION 1
+
+--------  1) You can immunize 3 nodes in the network, which after immunization, will never spread the virus to other connected nodes. According to degree heuristics and betweenness heuristics, which 3 nodes should be immunized in order to contain the virus?
+
+
+
+You can immunize 3 nodes in the network, which after immunization, will never spread the virus to other connected nodes. According to degree heuristics and betweenness heuristics, which 3 nodes should be immunized in order to contain the virus?
+
+=> According to degree centrality nodes which are 54 - 20 - 110 are the ones with highest degree centrality. They are the well connected ones within the network.
+
+=> According to betweennes centrality nodes which are 37 - 4 - 96 are the ones with highest betweennes centrality. They are the important bridges within the network.
+
+
+ANSWER - QUESTION 17 SECTION 2
+
+------ 2) Immunize the 3 nodes suggested by degree heuristics and betweenness heuristics, respectively, which heuristic provides the better outcome regarding a) the final activated number of people and b) flattening the daily infection curve (please provide figure in your answer)?
+
+
+=> We have identified the degree heuristic and betweenness heuristic on the highschool network and obtained the top 3 nodes with highest degree and betweennes. After that, for immunization we have deleted these vertices from the highschool network and created two different networks without those nodes. We have applied Independent cascade simulation model on three networks as highschool network which is the original one, the network without the degree heuristic and the network without the betweennes heuristic. Depending on the simulation results we have found that, the total number of people infected at the end of simulation was 121.36 for the orginal network 118.5 for degree heuristic and 117.62 betweenness heuristic. So the results show us that, when we do not immune any of nodes in the network the, on average the contagion is spread up to 121.36. When we immune the 3 nodes with highest degree centrality we can decrease this number upto 118.5 and when we immune the 3 nodes with highest betweennes cenrality we can decrease this number further to 117.62. Which shows that betweennes heuristic performs better compared to degree heuristic. In other words we can also interpret this result like this, the most important nodes which act or are located as bridge within the network are more influencial in terms of decreasing the total number people activated compared to the highest nodes which are very well connected in the network. 
+
+When we focus on the infection curve we can clearly see that the blue line which shows the total average number of people infected in each day for 28 days according to IC model is located in a lower position compared to other lines. This shows that, in total the total number of people infected is lower and and also it peaks at significantly lower 
+amount of infected people. 
+
+
+ANSWER - QUESTION 17 SECTION 3
+
+------ 3) Do you think the observation in 2) (i.e., degree heuristic preforms better than betweenness heuristics, or the opposite) is sensitive to a) the network structure and b) parameter in the IC model? And Why?
+
+
+=> a) Network structure: The network structure does affect how well the heuristics perform. As we have discussed, the network may have particular characteristics like communities, clusters, or other topological aspects that degree or betweenness heuristics are unable to effectively describe. These characteristics have a big impact on how viruses spread throughout the network, which affects how effective the heuristics are in general.
+
+=> b) IC model parameter: The heuristics' performance is indeed sensitive on the IC model's parameters. We did simulations with different probabilities and saw that the infection probability can affect how effective degree and betweenness heuristics are. Different spreading patterns can result from higher or lower probabilities, and in some circumstances, one heuristic may be preferred over the other.
+
+=>  In conclusion, degree and betweenness heuristics for influence maximization can perform differently depending on the network structure and IC model parameters. It is crucial to take into account these factors and run simulations with various network structures and model parameters to better evaluate their efficacy. Additionally, experimenting with different heuristics or approaches that better take into account the unique characteristics of the network might produce better outcomes in limiting the spread of infections.
+
+SECOND APPROACH FOR IMMUNIZATION
+
+!!! WE CAN ALSO SOLVE THE QUESTION AND OBTAIN RESULTS BY IDENTIFYING THE NODES AND THEN WE CAN MODIFY THE NODE ATTRIBUTES WITHIN THE FUNCTION. BOTH OF THE APPROACHES ARE GIVING THE SAME STRUCTURED RESULTS. WHEN WE HAVE SEARCHED ON THE TWO DIFFERENT APPROACHES WE LEARNED THAT, THE FIRST APPROACH WHERE WE REMOVED THE NODES MAY LEAD THE STRUCTURE OF THE NETWORK TO BE CHANGED AND FOR THE SECOND METHOD, SINCE WE ARE NOT REMOVING THE NODES BUT WE ARE MODIFYING THE ATTRIBUTES, THE STRUCTURE DOES NOT CHANGE. DEPENDING ON THESE WE MAY GET DIFFERENT RESULTS. BUT WHEN WE LOOK AT THE RESULTS WE CAN CONCLUDE THE SAME ANSWERS DEPENDING ON THE ANSWERS THAT TH QUESTION REQUIRES.
+
+```{r}
+#DEFINING THE IC MODEL 
+
+
+simulate_contagion_IC_with_immunized_attr <- function(node_seed, network, Pprob){
+  
+  # Prepare input for the 'calculate_value' function
+  adj_matrix <- igraph::as_adjacency_matrix(network, type = 'both') # Get the adjacency matrix of the network
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE) # Get the indices of all edges in the network
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1]) # Get the neighbour list of each node
+  
+  nNode <- vcount(network) # Get the number of nodes in the network
+  node_status <- rep.int(0, nNode) # Create a vector to store the infection status of each node
+  day_infected_sum <- numeric(28) # Create a vector to store the total number of newly infected people by day
+  new_infected_all <- vector(mode="list", length=28) # Create a list to store the ID of person getting infected at each time step
+  
+  # Simulate the spread of virus within 4 weeks, 100 times
+  for (i in 1:100){
+    # Set the initial condition at Day 1
+    node_status <- rep.int(0, nNode) # Reset the infection status of all nodes to 0
+    node_status[as.numeric(node_seed)] <- 1 # Set the seed node to be infected
+    day_infected <- numeric(28) # Create a vector to store the number of newly infected people by day
+    day_infected[1] <- sum(node_status ) # Record the number of infected people in Day 1
+    new_infected <- list() # Create a list to store the ID of person getting infected at each time step
+    new_infected[[1]] <- node_seed # Record the ID of the person infected in Day 1 (Patient Zero)
+    
+    for (day in c(2:28)){  
+      # Get the ID of all contagious nodes
+      ContagiousID <- which(node_status == 1)
+
+      # Remove immunized nodes from the list of contagious nodes
+      ContagiousID <- ContagiousID[!V(network)[ContagiousID]$immunized]
+      
+      # Calculate the ID of all nodes that will be newly infected in the current day
+      infectedID <- unlist(lapply(ContagiousID, calculate_value, each_neighbors, Pprob))
+      newinfectedID <- setdiff(infectedID, which(node_status == 1))
+
+      # Update the node status and other variables
+      node_status[newinfectedID] <- 1
+      day_infected[day] <- length(newinfectedID)
+      new_infected[[day]] <- newinfectedID
+    }
+    
+    # Update the cumulative counts
+    day_infected_sum <- day_infected_sum + day_infected
+    new_infected_all <- lapply(seq_along(new_infected_all), function(i) c(new_infected_all[[i]], new_infected[[i]]))
+  }
+  
+  # Return the mean number of newly infected people by day 
+  return(day_infected_sum/100)
+}
+
+# Create a vector of node IDs that you want to immunize
+immunized_nodes_1 <- top3_degreecent_highschool
+immunized_nodes_2 <- top3_betweenness_highschool
+
+# Set the immunized attribute for each node in the network
+V(highschool)$immunized <- FALSE # First, set all nodes to non-immunized
+V(highschool)[immunized_nodes_1]$immunized <- TRUE # Then, set the specified nodes to immunized
+
+results_secondapp_1 <- simulate_contagion_IC_with_immunized_attr(node_seed = seed_node,
+                                                                 network = highschool,
+                                                                 Pprob = 0.15)
+
+
+# Set the immunized attribute for each node in the network
+V(highschool)$immunized <- FALSE # First, set all nodes to non-immunized
+V(highschool)[immunized_nodes_2]$immunized <- TRUE # Then, set the specified nodes to immunized
+
+
+results_secondapp_2 <- simulate_contagion_IC_with_immunized_attr(node_seed = seed_node,
+                                                                 network = highschool,
+                                                                 Pprob = 0.15)
+
+
+cat("Final activated people for original network:", sum(IC_model_simulation), "\n")
+cat("Final activated people for degree heuristic:", sum(results_secondapp_1), "\n")
+cat("Final activated people for betweenness heuristic:", sum(results_secondapp_2), "\n")
+
+
+```
+
+
+```{r}
+# INFECTION CURVE PLOT FOR THE DEGREE AND BETWEENNESS HEURISTICS
+
+# Plot for results
+plot(1:28, results_secondapp_1, type = "l", col = "red", ylim = range(c(results_secondapp_1, results_secondapp_2)), xlab = "Days", ylab = "New Infections", main = "Daily Infection Curve with Immunized Nodes")
+lines(1:28, results_secondapp_2, col = "blue")
+legend("topright", legend = c("Degree Heuristic", "Betweenness Heuristic"), col = c("red", "blue"), lty = 1, bty = "n")
+```
+
+
+#-------------------------------------------------------------------------------------------------------
+
+
+##### (Question 18, 5 points):
+
+In addition to heuristics, we also introduced the greedy algorithm in the lecture. Develop a greedy algorithm to the IC model you have developed in Question 11 (! Please change the initially infected node to S107!). Answer the following questions (Question 18, 5 points): 
+
+  1) You can immunize 3 nodes in the network, which after immunization, will never spread the virus to other connected nodes. According greedy algorithm, which 3 nodes should be immunized in order to contain the virus?
+
+  2) Compared to the result from greedy algorithm to those from degree heuristic and betweenness heuristic. Regarding a) the final activated number of people and b) flattening the daily infection curve (please provide figure in your answer), does greedy algorithm provide the best result? And explain the reason. 
+
+(Important note: In Question 12, the initially infected node is S5. Please change it to S107 to answer Question 18. In other words, at Day 1, an infected node (N0, node ID= S107) is introduced to the network. Please submit the codes of this question along with your answer.)
+
+
+
+```{r}
+
+#DEFINING FUNCTION FOR INDEPENDET CANCADE MODEL
+
+stopifnot(require(data.table))
+stopifnot(require(Matrix))
+
+calculate_value <- function(node, each_neighbors,Pprob){
+  return(each_neighbors[[node]][ which(runif(length(each_neighbors[[node]]), 0, 1)<=Pprob)])
+  #'runif' is a function to generate random number in R
+}
+```
+
+```{r}
+IC <- function(node_seed, network, Pprob, n_sims = 5) {
+  # Prepare input for the 'calculate_value' function#
+  each_neighbors <- lapply(V(network), neighbors, graph=network) # Get the neighbor list of each node
+  
+  nNode <- vcount(network)
+  node_status <- rep.int(0, nNode) # Start from a healthy population
+  total_infected <- rep.int(0, 28) # Initialize a vector to store the total number of infected people for each day
+  
+  # Simulate the spread of virus n_sims times
+  for (i in 1:n_sims) {
+    node_status <- rep.int(0, nNode) # Start from a healthy population
+    day_infected <- vector() # Total number of infected population
+    new_infected <- list() # Record the ID of person getting infected at each time step
+    
+    day <- 1
+    node_status[as.numeric(node_seed)] <- 1 # Infected(value=1) health(value=0)
+    day_infected[day] <- sum(node_status) 
+    new_infected[[day]] <- node_seed # The ID of the person infected in Day 1 (Patient Zero)
+    
+    # Simulate the spread of virus within 4 weeks
+    for (day in c(2:28)) {  
+      ContagiousID <- which(node_status == 1) 
+      infectedID <- unlist(lapply(ContagiousID, calculate_value, each_neighbors, Pprob))
+      newinfectedID <- setdiff(infectedID, which(node_status == 1))
+      
+      # Update the node status and other variables
+      node_status[newinfectedID] <- 1
+      day_infected[day] <- length(newinfectedID)
+      new_infected[[day]] <- newinfectedID
+    }
+    
+    # Add the total number of infected people for each day to the cumulative total
+    total_infected <- total_infected + day_infected
+  }
+  
+  # Return the average number of infected people for each day
+  return(total_infected/n_sims)
+}
+```
+
+```{r}
+
+#DEFINING THE GREEDY ALGORITHM WITH THE IC SIMULATION MODEL - Detailed description about the function is in the answers are at the end of the coding part of this question.
+
+  immunized_nodes_IC <- function(network, node_seed, Pprob) {
+    immunized_nodes <- c()
+  
+    for (k in 1:3) {
+      min_infected_nodes <- Inf
+      min_node <- 0
+      
+      for (node in V(network)) {
+        if (!(node %in% immunized_nodes)) {
+          new_network <- delete.vertices(network, node)
+          tryCatch({
+            infected_nodes <- IC(node_seed, new_network, Pprob)
+            n_infected_nodes <- sum(infected_nodes)
+            
+            if (n_infected_nodes < min_infected_nodes) {
+              min_infected_nodes <- n_infected_nodes
+              min_node <- node
+            }
+          }, error = function(e) {
+            # do nothing and continue the loop
+          })
+        }
+      }
+      
+      immunized_nodes <- c(immunized_nodes, min_node)
+    }
+  
+    # Identify the total number of infected people with the immunized nodes
+    new_network <- delete.vertices(network, immunized_nodes)
+    infected_nodes <- IC(node_seed, new_network, Pprob)
+    total_infected <- sum(infected_nodes)
+  
+    # Return the immunized nodes and the total number of infected people
+    return(list(immunized_nodes = immunized_nodes, 
+                total_infected = total_infected, 
+                infected_nodes = infected_nodes))
+  }
+```
+
+```{r} 
+# EXECUTION OF THE GREEDY ALGORITHM AND SPECIFIYIN IMPORTANT RESULTS FORM THE ALGORITHM
+
+# Running greedt algorithm
+results_greedy_algo <-immunized_nodes_IC(network = highschool,
+                                         node_seed = seed_node,
+                                         Pprob = 0.15)
+
+
+#Which nodes are needed to be immunized to decrease the contagion at the maximum level 
+results_greedy_algo_immunized_nodes <- results_greedy_algo$immunized_nodes
+
+#Total number of people infected with the IC and Greddy Algorithm model 
+results_greedy_algo_total_infected <- results_greedy_algo$total_infected
+
+#Number of people infected day by day
+infected_nodes_days_greedy_algo <- results_greedy_algo$infected_nodes
+```
+
+```{r}
+#RESULTS FOR - Original Model - Betweennes H. - Degree H. - Greedy Algorithm
+
+cat("Final activated people for original network:", sum(IC_model_simulation), "\n")
+cat("Final activated people for degree heuristic:", sum(results_secondapp_1), "\n")
+cat("Final activated people for betweenness heuristic:", sum(results_secondapp_2), "\n")
+cat("Final activated people Greedy Algorithm with IC simulation:", sum(infected_nodes_days_greedy_algo), "\n")
+```
+
+```{r}
+#PLOT OF THE INFECTION CURVES 
+
+# Comparing the results - Adding the infection curve into the plot 
+plot(1:28, results_secondapp_1, type = "l", col = "red", ylim = range(c(results_secondapp_1, results_secondapp_2, infected_nodes_days_greedy_algo)), xlab = "Days", ylab = "New Infections", main = "Daily Infection Curve with Immunized Nodes")
+lines(1:28, results_secondapp_2, col = "blue")
+legend("topright", legend = c("Degree Heuristic", "Betweenness Heuristic"), col = c("red", "blue"), lty = 1, bty = "n")
+lines(1:28, infected_nodes_days_greedy_algo, col = "green")
+legend("topright", legend = c("Degree Heuristic", "Betweenness Heuristic", "Greedy Algorithm"), col = c("red", "blue", "green"), lty = 1, bty = "n")
+```
+
+ANSWER QUESTION 18 - SECTION 1
+
+------- 1) You can immunize 3 nodes in the network, which after immunization, will never spread the virus to other connected nodes. According greedy algorithm, which 3 nodes should be immunized in order to contain the virus?
+
+
+=> We have created a Greedy algorithm, iterates over each node in the network, excluding nodes that have already been immunized. For each node, it removes that node from the network and simulates the spread of the virus using the IC function. It then calculates the total number of infected nodes in the network after the simulation and compares it to the current minimum number of infected nodes. If the current simulation results in fewer infected nodes than the current minimum, then the current node is selected as the one to immunize. The process is repeated for a total of 3 nodes to be immunized. Depending on our algorithm we have concluded that the nodes 60-82 and 50 are the important ones depending on the number of people infected. In other words they are the nodes which have the highest influence on the network. Having those nodes increase the number of people infected in the network or conversely not having them decreases the number of people infected significantly. 
+
+!! There is one point we realized and want to mention about, the algorithm is stochastic and generates random numbers. So, each time we run the algorithm, it selects different nodes to be immunized based on the simulation outcomes. However, the overall approach and the results should be similar. Specifically the function calculate_value generates random numbers using the runif function. Specifically, it generates a uniform distribution of random numbers between 0 and 1, and checks if each number is less than or equal to the given probability Pprob. The nodes connected to the contagious node for which this condition holds are returned as infected nodes. Because of this we are having different nodes to be immunized in each and every execution of the Greedy Algorithm.
+ 
+
+ANSWER QUESTION 18 - SECTION 2
+
+------- 2) Compared to the result from greedy algorithm to those from degree heuristic and betweenness heuristic. Regarding a) the final activated number of people
+b) flattening the daily infection curve (please provide figure in your answer), 
+Does greedy algorithm provide the best result? And explain the reason. 
+
+
+=> Depending on the course and some research about creating Greedy Algorithm we have learned that without running an IC simulation, the greedy algorithm can be applied to a network. In fact, regardless of the particular contagion or influence model being used, the greedy algorithm can be applied to any network to determine the most influential nodes based solely on the network structure. So for the second section of the question we had 2 options. First one is to create a Greddy Algorithm only on the highschool network and then identify the node and make them immunized in the IC function where do simulate the contagion. In this approach the importance of nodes is measured using centrality metrics like degree or betweenness centrality, which take into account the nodes' positions within the network, in the network structure approach. The other option is to incorporate Greedy Algorithm with independent cascade model. Which means we check the nodes with the simulation and the outcome in terms of the number of people infected and identifying the nodes with highes inflıence to be immunized. So distinction between the two methods is how they weight the significance of nodes. By simulating the contagion process on the network, the IC simulation approach determines the importance of nodes based on their capacity to spread the infection. Inour opinion the IC simulation method may offer a more precise assessment of node importance because it takes the particular contagion or influence model in use into account. One important thing we need to mention about the algorithm is that, before choosing a node to receive the immunization, we added a condition to see if there are any infected nodes. The function skips the node and moves on to the next iteration of the loop if the number of infected nodes is zero. This prevents the function from attempting to run the IC model on a network that is empty, which could result in the "subscript out of bounds" error. In addition to that, because of the computational limitations, we have tried to run the IC model for 100 times for better and accurate results but the memory of our laptops were not sufficient enough to handle it. So we run the algorithm for 5 times and it resulted better than the huristics even they are run for 100 times. Depending on this problem we may see a liitle bit of different infecntion cureve compared to the other approaches bu the main structure relies and greddy algorithm performns significantly better. Here are the results and interpretations below.
+
+=> As we have showed with the code above, the final activated people for original network is 121.43, final activated people for degree heuristic is 121.07, final activated people for betweenness heuristic: 120.51, final activated people Greedy Algorithm with IC simulation: 117.4. Main important part is that, in the betweennes and degree heuristics we have run those models for 100 times for better and more accurate results and because of the computational limitations, we run the greedy algorithm for 5 times. Even running it for 5 times greedy algorithm performs significantly better than the other approaches. Algorithm captures the nodes which are most influencial within the network and they can create the max influence in the network, so by immunizing them we can decrease the contagion significantly comapred to the other approaches. When we focus on the figure we can see that greedy algorithm behaves different comapred to other approaches it is because of the number of times we have run the algorithm, it is just run for 5 times and still having the best result. As we can see from the lines it peaks faster than than the other approaches and decreases rapidly and stays in the lower levels for total number of people infected compared to other approaches. 
+
+=>The reason why does greedy algorithm performs better than the heuristic approaches is that, the greedy algorithm considers both the IC model's propagation dynamics and network structure. A node's degree is a metric of how many neighbors it has in the network is used by the degree heuristic to choose which nodes to prioritize. The betweenness heuristic chooses nodes based on the number of shortest paths that pass through them in the network, which is a measure of a node's betweenness centrality. The propagation dynamics of the IC model, which are crucial for forecasting the spread of influence in the network, are not taken into account by either of these heuristic approaches. The greedy algorithm, on the other hand, chooses nodes iteratively based on their expected influence, which is determined by simulating the spread of influence from the chosen node using the IC model. This method considers the IC model's propagation dynamics as well as its network structure. The greedy algorithm can choose nodes that are more likely to have a high impact on the spread of influence in the network by taking into account each node's influence in the context of the propagation dynamics of the IC model. Therefore, compared to the degree and betweenness heuristic approaches, the greedy algorithm can be more successful at identifying influential nodes in the network, especially when the propagation dynamics of the IC model play a significant role in determining the spread of influence. As we can see form the results even the greedy algrorithm could not be run as much as the other approaches it is significantly better then them.
+
+  
+#-------------------------------------------------------------------------------------------------------
+
+
+##### Question 19 (8 points)
+
+Next you will study the influence maximization problem in the threshold model. Following below steps to answer Question 19 (8 points):
+
+1)  Use the threshold model for the "once-a-beef" campaign you build in Question 14, reset the seed nodes to a null set;
+2)  According to degree heuristics, which nodes should be included in the seed set in order to maximize the spread of the campaign? The size of seed set is 7, i.e., you can choose 7 nodes to activate to kick off the contagion process.
+3)  According to betweenness heuristics, which nodes should be included in the seed set in order to maximize the spread of the campaign? The size of seed set is 7, i.e., you can choose 7 nodes to activate to kick off the contagion process.
+4)  According to greedy algorithm, which nodes should be included in the seed set in order to maximize the spread of the campaign? The size of seed set is 7, i.e., you can choose 7 nodes to activate to kick off the contagion process.
+5)  Compared the results from degree heuristics, betweenness heuristics and greedy algorithm, which method provides the best outcome? Please show the results of three methods in a figure.
+
+
+
+```{r}
+
+#####ANSWER QUESTION 19 - SECTION 1
+
+
+
+#THRESHOLD MODEL WITH SEED NODES ARE SET TO NULL WITHIN THE FUNCTION 
+
+calculate_adoptedNei <- function(node, node_status, each_neighbors){
+  return(mean(node_status[each_neighbors[[node]]] == 1)) ### to calculate the percentage of adopted neigbhours
+}
+
+ThModel_no_seed_avg<-function(network,threshold,n_runs=100){ 
+  #prepare input for the 'calculate_value' function#
+  adj_matrix <- igraph::as_adjacency_matrix(network, type = 'both')
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE)
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1]) #get the neigbhour list of each node
+  
+  nNode<-vcount(network)
+  day_total_infected_avg <- numeric(28) 
+  
+  for (i in 1:n_runs){
+    node_status <- rep.int(0, nNode) 
+    neighbour_status<-rep.int(0, nNode)  ##percentage of adopted neighbours
+    new_infected <- list()
+    day_total_infected <- rep(0,28) ### Total number of active people by end of each day
+    
+    ### Day 1 ####
+    day <- 1
+    node_status[] <- 0 # Reset seed nodes to null set
+    new_infected[[day]] <- NULL
+    day_total_infected[day]=sum(node_status == 1) 
+    
+    for (day in c(2:28)){
+      NotAdopted <- which(node_status == 0)
+      Adopted <- which(node_status == 1)
+      
+      neighbour_status[NotAdopted] <- unlist(lapply(NotAdopted, calculate_adoptedNei, node_status, each_neighbors))
+      
+      new_infected[[day]] <- setdiff(which(neighbour_status > threshold), Adopted)
+      node_status[new_infected[[day]]] <- 1  #update the staus to 1 for those newly adopted
+      day_total_infected[day] <- sum(node_status)
+      
+      day <- day + 1
+    }
+    day_total_infected_avg <- day_total_infected_avg + day_total_infected
+  }
+  
+  day_total_infected_avg <- day_total_infected_avg / n_runs
+  return(day_total_infected_avg)
+}
+```
+
+
+
+```{r}
+
+####ANSWER QUESTION 19 - SECTION 2
+
+# CALCULATION OF DEGREE CENTRALITY 
+
+# Calculate the degree centrality for each node in the network
+node_degrees <- degree(highschool)
+
+# Find the indices of the top 7 nodes with the highest degree centrality
+top_7_nodes_degree <- order(node_degrees, decreasing = TRUE)[1:7]
+
+# Display the top 7 nodes
+top_7_nodes_degree
+```
+
+```{r}
+# THRESHOLD MODEL FOR DEGREE HEURISTIC 
+
+ThModel_seed_degree_heu <- function(network, seed_nodes, threshold, n_runs = 100) { 
+  #prepare input for the 'calculate_value' function#
+  adj_matrix <- igraph::as_adjacency_matrix(network, type = 'both')
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE)
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1]) #get the neighbor list of each node
+  
+  nNode <- vcount(network)
+  day_total_infected_avg <- numeric(28)
+  total_infected <- numeric(n_runs)
+  
+  for (i in 1:n_runs) {
+    node_status <- rep.int(0, nNode) 
+    neighbour_status <- rep.int(0, nNode)  ##percentage of adopted neighbours
+    new_infected <- list()
+    day_total_infected <- rep(0, 28) ### Total number of active people by end of each day
+    
+    ### Day 1 ####
+    day <- 1
+    node_status[seed_nodes] <- 1 
+    new_infected[[day]] <- seed_nodes
+    day_total_infected[day] <- sum(node_status == 1) 
+    ####
+    
+    for (day in c(2:28)) {
+      NotAdopted <- which(node_status == 0)
+      Adopted <- which(node_status == 1)
+      
+      neighbour_status[NotAdopted] <- unlist(lapply(NotAdopted, calculate_adoptedNei, node_status, each_neighbors))
+      
+      new_infected[[day]] <- setdiff(which(neighbour_status > threshold), Adopted)
+      new_infected[[day]] <- setdiff(new_infected[[day]], seed_nodes) # remove immunized nodes from the new_infected list
+      node_status[new_infected[[day]]] <- 1  #update the status to 1 for those newly adopted
+      day_total_infected[day] <- sum(node_status)
+      
+      day <- day + 1
+    }
+    
+    total_infected[i] <- sum(node_status)
+    day_total_infected_avg <- day_total_infected_avg + day_total_infected
+  }
+  
+  day_total_infected_avg <- day_total_infected_avg / n_runs
+  total_infected_avg <- mean(total_infected)
+  
+  return(list(day_total_infected_avg, total_infected_avg))
+}
+```
+
+```{r}
+
+#EXECUTION OF THE MODEL DEPENDING ON THE DEGREE HEURISTIC
+
+#Model Run
+result_degree_heu_ThModel <- ThModel_seed_degree_heu(network = highschool,
+                                                     seed_nodes = top_7_nodes_degree, 
+                                                     threshold = 0.15,
+                                                     n_runs = 100)
+
+# Display the average total active people at the end of each day
+result_degree_heu_ThModel
+
+```
+
+
+
+
+```{r}
+
+####ANSWER QUESTION 19 - SECTION 3
+
+#CALCULATION OF BETWEENNESS CENTRALITY 
+
+# Calculate the degree centrality for each node in the network
+node_betweenness <- betweenness(highschool)
+
+# Find the indices of the top 7 nodes with the highest degree centrality
+top_7_nodes_betweenness <- order(node_betweenness, decreasing = TRUE)[1:7]
+
+# Display the top 7 nodes
+top_7_nodes_betweenness
+```
+
+```{r}
+
+#THRESHOLD MODEL FOR BETWEENNESS HEURISTIC
+
+ThModel_seed_betweenness_heu <- function(network, seed_nodes, threshold, n_runs = 100) { 
+  #prepare input for the 'calculate_value' function#
+  adj_matrix <- igraph::as_adjacency_matrix(network, type = 'both')
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE)
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1]) #get the neighbor list of each node
+  
+  nNode <- vcount(network)
+  day_total_infected_avg <- numeric(28)
+  total_infected <- numeric(n_runs)
+  
+  for (i in 1:n_runs) {
+    node_status <- rep.int(0, nNode) 
+    neighbour_status <- rep.int(0, nNode)  ##percentage of adopted neighbours
+    new_infected <- list()
+    day_total_infected <- rep(0, 28) ### Total number of active people by end of each day
+    
+    ### Day 1 ####
+    day <- 1
+    node_status[seed_nodes] <- 1 
+    new_infected[[day]] <- seed_nodes
+    day_total_infected[day] <- sum(node_status == 1) 
+    ####
+    
+    for (day in c(2:28)) {
+      NotAdopted <- which(node_status == 0)
+      Adopted <- which(node_status == 1)
+      
+      neighbour_status[NotAdopted] <- unlist(lapply(NotAdopted, calculate_adoptedNei, node_status, each_neighbors))
+      
+      new_infected[[day]] <- setdiff(which(neighbour_status > threshold), Adopted)
+      new_infected[[day]] <- setdiff(new_infected[[day]], seed_nodes) # remove immunized nodes from the new_infected list
+      node_status[new_infected[[day]]] <- 1  #update the status to 1 for those newly adopted
+      day_total_infected[day] <- sum(node_status)
+      
+      day <- day + 1
+    }
+    
+    total_infected[i] <- sum(node_status)
+    day_total_infected_avg <- day_total_infected_avg + day_total_infected
+  }
+  
+  day_total_infected_avg <- day_total_infected_avg / n_runs
+  total_infected_avg <- mean(total_infected)
+  
+  return(list(day_total_infected_avg, total_infected_avg))
+}
+```
+
+```{r}
+#EXECUTING FUNCTION DEPENDING ON THE BETWEENNESS HEURISTIC
+
+result_betweenness_heu_ThModel <- ThModel_seed_degree_heu(network = highschool,
+                                                          seed_nodes = top_7_nodes_betweenness, 
+                                                          threshold = 0.15,
+                                                          n_runs = 100)
+
+# Display the average total active people at the end of each day
+result_betweenness_heu_ThModel
+```
+
+
+
+```{r}
+
+####ANSWER QUESTION 19 - SECTION 4
+
+# THRESHOLD MODEL CRETION 
+
+ThModel <- function(node_seed, network, threshold, nSimulations) {
+  adj_matrix <- igraph::as_adjacency_matrix(network, type = 'both')
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE)
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1])
+  
+  nNode <- vcount(network)
+  results <- vector("list", nSimulations)
+  
+  for (i in 1:nSimulations) {
+    node_status <- rep.int(0, nNode) 
+    neighbour_status <- rep.int(0, nNode)
+    new_infected <- list()
+    day_total_infected <- rep(0, 28)
+    
+    day <- 1
+    node_status[as.numeric((node_seed))] <- 1 
+    new_infected[[day]] <- node_seed
+    day_total_infected[day] <- sum(node_status == 1) 
+    
+    for (day in 2:28) {
+      NotAdopted <- which(node_status == 0)
+      Adopted <- which(node_status == 1)
+      
+      neighbour_status[NotAdopted] <- unlist(lapply(NotAdopted, calculate_adoptedNei, node_status, each_neighbors))
+      
+      new_infected[[day]] <- setdiff(which(neighbour_status > threshold), Adopted)
+      node_status[new_infected[[day]]] <- 1  
+      day_total_infected[day] <- sum(node_status)
+    }
+    
+    results[[i]] <- list(day_total_infected = day_total_infected, new_infected = new_infected)
+  }
+  
+  # Calculate average total infected people at the end of the simulation
+  total_infected_end <- mean(sapply(results, function(x) x$day_total_infected[28]))
+  
+  # Calculate average total infected people for each day
+  total_infected_daily <- Reduce(`+`, lapply(results, function(x) x$day_total_infected)) / nSimulations
+  
+  return(list(total_infected_end = total_infected_end, total_infected_daily = total_infected_daily))
+}
+
+
+
+#GREEDY ALGIRITHM WITH THRESHOLD MODEL 
+
+
+# Define a function to calculate the total number of people who adopt the behavior
+total_adopted <- function(infected_nodes, network, threshold) {
+  ThModel(infected_nodes, network, threshold, nSimulations = 1)[[1]][28]
+}
+
+# Define a function to find the most influential nodes
+find_influential_nodes <- function(network, threshold, num_seeds = 10, num_runs = 20) {
+  # Initialize an empty list to store the most influential nodes
+  all_influential_nodes <- list()
+  
+  # Loop through the specified number of runs
+  for (i in 1:num_runs) {
+    # Initialize a list of nodes to consider
+    nodes_to_consider <- 1:vcount(network)
+    
+    # Initialize an empty list to store the influential nodes for this run
+    influential_nodes <- list()
+    
+    # Loop through the specified number of seed nodes
+    for (j in 1:num_seeds) {
+      # Calculate the total number of people who adopt the behavior for each node
+      node_scores <- sapply(nodes_to_consider, function(node) total_adopted(node, network, threshold))
+      
+      # Find the node with the highest score and add it to the list of influential nodes
+      max_node <- nodes_to_consider[which.max(node_scores)]
+      influential_nodes[[j]] <- max_node
+      
+      # Remove the influential node from the list of nodes to consider
+      nodes_to_consider <- setdiff(nodes_to_consider, max_node)
+    }
+    
+    # Store the influential nodes for this run
+    all_influential_nodes[[i]] <- influential_nodes
+  }
+  
+  # Calculate the frequency of each node being influential across all runs
+  node_counts <- table(unlist(all_influential_nodes))
+  
+  # Find the nodes that were influential in the majority of runs
+  most_common_nodes <- names(node_counts[node_counts >= (num_runs / 2)])
+  
+  return(most_common_nodes)
+}
+```
+
+```{r}
+#MOST INFLUENCIAL NODES
+
+# Find the 7 most influential nodes in the network
+influential_nodes <- find_influential_nodes(highschool, 0.15, num_seeds = 7)
+
+# Print the results
+print(influential_nodes)
+```
+
+```{r}
+#EXECUTING THE MODEL TO SEE THE SIMULATION RESULTS 
+
+results_ThModel_greedy_nodes <- ThModel(node_seed = influential_nodes, 
+                                        network = highschool,
+                                        threshold = 0.15,
+                                        nSimulations = 100)
+```
+
+```{r}
+#SIMULATION RESULTS
+
+results_ThModel_greedy_nodes
+```
+
+
+
+```{r}
+
+#PLOTTING THE CURVES
+
+
+#Extracting the reuslts 
+result1 <- result_degree_heu_ThModel[1]
+result2 <- result_betweenness_heu_ThModel[1]
+result3 <- results_ThModel_greedy_nodes[2]
+
+# Extract the daily infection curves for each simulation
+y1 <- result1[[1]]
+y2 <- result2[[1]]
+y3 <- result3$total_infected_daily
+
+# Plot the curves
+plot(1:28, y1, type = "l", col = "red", ylim = range(c(y1, y2, y3)), xlab = "Days", ylab = "New Infections", main = "Daily Infection Curve with Immunized Nodes")
+lines(1:28, y2, col = "blue")
+legend("topright", legend = c("Simulation 1", "Simulation 2"), col = c("red", "blue"), lty = 1, bty = "n")
+lines(1:28, y3, col = "green")
+legend("topright", legend = c("Simulation 1", "Simulation 2", "Simulation 3"), col = c("red", "blue", "green"), lty = 1, bty = "n")
+
+
+```
+
+```{r}
+#RESULTS
+
+# Print the three results
+print(result1)
+print(result2)
+print(result3)
+```
+
+--- ANSWER - QUESTION 19 - SECTION 5 
+
+5) Compared the results from degree heuristics, betweenness heuristics and greedy algorithm, which method provides the best outcome? Please show the results of three methods in a figure.
+(Please submit the codes of this question along with your answer.)
+
+=> As we can see from the total daily infection average numbers and the figure above the three of the approaches are performing well in terms of achieveing the maximum influence but when we focus on the daily infection curves more and the number for each day the model depends on betweenness heuristic and greedy algorithm performns better than the degree heuristic. When we comapre the greedy aglgorithm and betweennes heuristic approach, greedy algorithm starts poorly compared to betweennes heuristic approach, but they both achieve to infect or adopt the campaign behavior at the same day as 6th day. Meaning that, greedy agorithm cathes the effectiveness of betweennes heuristic approach. It is hard to say that one of them is better when we consider the total number of people adopted or the speed of adopting the behavior to everyone, because they are performing very similar. But ıne think maybe we can say, that is, greedy algorithm increases the computational complexity too much so that since betweennes heuristic is more straightforward, easy to apply and it requires less computational load so we woul be preferring betwennnes heuristic with threshold model simulation. 
+
+
+#-------------------------------------------------------------------------------------------------------
+
+##### Question 20 (7 points)
+
+Question 20 (7 points): You have compared the performance of degree heuristics, betweenness heuristics and greedy algorithm. Can you propose an even more efficient algorithm (i.e., achieve even higher diffusion rate with even less percentage of nodes using as seeds)? Answer this question by the following steps:
+    
+  1) Description of your algorithm and the reason why you think it will be more effective;
+    
+  2) Test your algorithm in the threshold model for the “once-a-beef” campaign used in Question 19; Comments on its effectiveness;
+    
+  3) Test your algorithm in a large real-world network (e.g., n≥1000) using threshold model. For the larger network, you can choose one from the database, and make a subgraph from it (e.g., choose only 1000 nodes). Describe the network you choose, your setting about threshold, and comment on the effectiveness of your algorithm on this network.
+
+
+
+
+```{r}
+ThModel <- function(node_seed, network, n_sims = 100) {
+  
+  # Preparing input for the 'calculate_adoptedNei' function
+  adj_matrix <- igraph::as_adjacency_matrix(network, type = 'both')
+  each_neighbors <- which(adj_matrix > 0, arr.ind = TRUE)
+  each_neighbors <- split(each_neighbors[, 2], each_neighbors[, 1]) # Get the neighbors list of each node
+  
+  nNode <- vcount(network)
+  total_infected <- rep.int(0, n_sims) # Initialize a vector to store the total number of infected people for each simulation
+  day_infected <- matrix(0, nrow = 28, ncol = n_sims) # Initialize a matrix to store the number of infected people for each day
+  
+  # Simulate the spread of virus n_sims times
+  for (i in 1:n_sims) {
+    node_status <- rep.int(0, nNode) # Start from a healthy population
+    node_status[as.numeric((node_seed))] <- 1 # Infect the seed node
+    new_infected <- list() # Record the ID of newly infected people at each time step
+    new_infected[[1]] <- node_seed # The ID of the person infected in Day 1 (Patient Zero)
+    
+    # Generate the threshold values for each node
+    Pprob <- runif(nNode)
+    threshold_values <- lapply(seq_len(nNode), function(node) {
+      calculate_value(node, each_neighbors, Pprob)
+    })
+    
+    # Simulate the spread of virus within 4 weeks
+    for (day in c(2:28)) {
+      NotAdopted <- which(node_status == 0)
+      Adopted <- which(node_status == 1)
+      
+      neighbour_status <- unlist(lapply(NotAdopted, calculate_adoptedNei, node_status, each_neighbors))
+      
+      new_infected[[day]] <- setdiff(which(neighbour_status > threshold_values), Adopted)
+      node_status[new_infected[[day]]] <- 1  # Updating the status to 1 for those newly adopted
+      day_infected[day, i] <- length(new_infected[[day]])
+    }
+    
+    # Add the total number of infected people for this simulation to the cumulative total
+    total_infected[i] <- sum(node_status)
+  }
+  
+  # Return the average number of infected people for each day and the total number of infected people over n_sims simulations
+  return(list(avg_daily_infected = colMeans(day_infected), total_infected = mean(total_infected)))
+}
+```
+
+```{r}
+# calculate degree centrality
+degree_centrality <- degree(highschool)
+
+# calculate betweenness centrality
+betweenness_centrality <- betweenness(highschool)
+```
+
+```{r}
+# calculate weighted score for each node
+weighted_score <- (degree_centrality + betweenness_centrality)/sum(degree_centrality + betweenness_centrality)
+
+# check the ranking
+top_scores <- sort(weighted_score, decreasing = TRUE)
+
+top_scores[1:5]
+```
+
+```{r}
+greedy_threshold <- function(network, seed_nodes, threshold=0.15) {
+  
+  # Preparation
+  nNodes <- vcount(network)
+  infected_nodes <- rep(0, nNodes)
+  infected_nodes[as.numeric(seed_nodes)] <- 1
+  new_infected_nodes <- seed_nodes
+  
+  # Sort nodes based on their weighted scores
+  weighted_score <- (degree(network) + betweenness(network))/sum(degree(network) + betweenness(network))
+  sorted_nodes <- order(weighted_score, decreasing = TRUE)
+  
+  # Select nodes to immunize
+  immunized_nodes <- c()
+  for (i in sorted_nodes) {
+    if (! (i %in% seed_nodes) && ! (i %in% immunized_nodes)) {
+      new_network <- delete.vertices(network, immunized_nodes)
+      new_infected_nodes <- which((rowSums(igraph::as_adjacency_matrix(new_network, type = "both")) * infected_nodes) >= threshold)
+      new_infected_nodes <- setdiff(new_infected_nodes, immunized_nodes)
+      gain <- length(new_infected_nodes) - length(infected_nodes)
+      if (gain <= 0) {
+        break
+      } else {
+        immunized_nodes <- c(immunized_nodes, i)
+        infected_nodes[i] <- 0
+      }
+    }
+  }
+  
+  # Calculate the total number of infected nodes with the immunized nodes
+  new_network <- delete.vertices(network, immunized_nodes)
+  infected_nodes <- which((rowSums(igraph::as_adjacency_matrix(new_network, type = "both")) * infected_nodes) >= threshold)
+  
+  return(list(immunized_nodes = immunized_nodes, total_infected = length(infected_nodes)))
+}
+```
+
+
+```{r}
+# Calculate the immunized nodes and the total number of infected people
+seed_node = "107" 
+
+
+# Find the most effective nodes to immunize
+immunized_nodes_greedy_algo <- greedy_threshold(highschool,
+                                                seed_nodes=seed_node, 
+                                                threshold = 0.15)$immunized_nodes
+
+# Run the ThModel function to simulate the spread of the virus
+result_hybrid_algo <- ThModel(node_seed = seed_node,
+                              network = highschool, 
+                              n_sims = 100)
+
+# Print the results
+cat(paste("Seed node(s):", seed_nodes, "\n"))
+cat(paste("Immunized nodes:", immunized_nodes_greedy_algo, "\n"))
+cat(paste("Total infected people without immunization:", result_hybrid_algo$total_infected, "\n"))
+cat(paste("Average daily infected people with immunization:\n"))
+print(result_hybrid_algo$avg_daily_infected)
+```
+
+
+
+
+```{r}
+# Read in the data
+facebook_page_network_edges <- read.csv("C:/Users/Uygar TALU/Desktop/facebook network/musae_facebook_edges.csv",
+                                        header=FALSE)
+facebook_page_network_att <- read.csv("C:/Users/Uygar TALU/Desktop/facebook network/musae_facebook_target.csv",
+                                        header=FALSE)
+```
+
+```{r}
+# Create the nodes dataframe
+facebook_page_nodes <- data.frame(facebook_id = as.character(facebook_page_network_att$facebook_id),
+                                  page_name = as.character(facebook_page_network_att$page_name),
+                                  page_type = as.character(facebook_page_network_att$page_type))
+
+# Create the edges dataframe
+facebook_page_edges <- data.frame(from = c(as.character(facebook_page_network_edges[,1])),
+                                  to = c(as.character(facebook_page_network_edges[,2])))
+
+# Create the network graph
+facebook_page_network <- graph_from_data_frame(facebook_page_edges, 
+                                               directed = FALSE, 
+                                               vertices = facebook_page_nodes)
+
+# Extract the largest connected component
+co <- components(facebook_page_network)
+facebook_page_network <- induced.subgraph(facebook_page_network, which(co$membership == which.max(co$csize)))
+```
+
+```{r}
+# Calculate the immunized nodes and the total number of infected people
+immunized_nodes <- greedy_threshold(facebook_page_network, seed_nodes, threshold_values)$immunized_nodes
+
+total_infected <- ThModel_simulation(facebook_page_network, immunized_nodes, threshold_values)
+
+# Print the results
+cat("Seed nodes:", seed_nodes, "\n")
+cat("Immunized nodes:", immunized_nodes, "\n")
+cat("Total infected people:", total_infected, "\n")
+```
+
+
+ANSWER - QUESTION 20 - SECTION 1 
+
+
+------- 1) Description of your algorithm and the reason why you think it will be more effective;
+
+
+Degree-based & Betweenness-based Greedy algorithm:
+
+--- BRIEF EXPLANATION OF THE ALGORITHM
+
+=> The optimal set of seed nodes is determined using a hybrid strategy that incorporates the three methods. The degree-based algorithm first chooses a group of nodes with high degrees. Then, the betweenness-based method determines which nodes of the ones that were chosen have the highest betweenness centrality, and it includes them in the set of seeds. The greedy algorithm then chooses the nodes with the largest marginal gain and includes them in the seed set. By doing this, we hope to identify the nodes with a high degree, those with a significant network impact, and those with the largest marginal gain.
+
+
+--- DETAILED EXPLANATION OF THE ALGORITHM
+
+Our algorithm consists of three main steps:
+
+Step 1: Degree and Betweenness Heuristics
+
+=> The nodes with the highest degree and betweenness centrality scores are identified in the first step. These nodes are chosen as the initial seed nodes because it is thought that they have a greater capacity to propagate the virus. To decrease the number of candidate nodes for the following stage, this step is considered in the first step.
+
+Step 2: Greedy Algorithm
+
+=> The greedy algorithm is used in the second stage to choose the remaining seed nodes. The greedy method seeks to reduce the number of seed nodes while increasing the number of infected nodes in the network. Starting with the list of nodes determined in step 1, we choose the first seed node. Then, until the target number of seed nodes is reached, we iteratively choose the node that will cause the greatest increase in the number of infected nodes while keeping the fewest number of seed nodes.
+
+Step 3: Immunization and Infection Spread
+
+=> In the third stage, we immunize the chosen seed nodes and use the Threshold model to simulate how the infection spreads throughout the network. A threshold value that indicates the bare minimum of infected neighbors that a node must have in order to become infected is used to express the immunization status of a node. The node gets infected if the number of infected neighbors exceeds the threshold amount. We calculate the typical number of infected nodes for each seed set after running the simulation multiple times.
+
+Advantages and Disadvantages:
+
+=> Algorithm has some advantages and disadvantages for us. Here are the advantages and disadvatages:
+
+=> The suggested algorithm has a number of benefits over current algorithms. In order to attain a greater diffusion rate with fewer seed nodes, it first combines the advantages of the degree and betweenness heuristics and the greedy method. Second, it is made for the Threshold model, a more accurate representation of the spread of infection in many real-world circumstances. The approach can also be used in large-scale networks and is easy to implement.
+
+=> The method does, however, have significant drawbacks. First, since the degree and betweenness centrality measurements might not adequately account for the community structure in networks with strong community structures, it might not perform well in certain networks. Second, the algorithm might be highly sensitive to the selection of the threshold value, which could have a big impact on the outcomes.
+
+In conclusion, in the context of the Threshold model, the suggested hybrid method that combines degree-betweenness heuristics and greedy algorithm can achieve a greater diffusion rate with fewer seed nodes than existing techniques. The algorithm is appropriate for large-scale networks since it is made to be straightforward, effective, and scalable. By including community detection techniques and adaptive threshold values, the suggested approach can be further enhanced.
+
+!!! Important part information about the algorithm: Depending on our research about the field, we learned that, we can give some measurements more importance or weight than others by normalizing or weighting the degree and betweenness centrality measures. This allows us to prioritize nodes with high degree and high betweenness centrality, which are probably the most significant nodes in the network, in the context of our hybrid approach. Depending on that we have Normalization or weighting the cetrality measures in our algorithm
+
+
+
+
+IMPORTANT!!
+=> We have created the hybrid model upto some extend but we had problems on executing it withut any errors. Depending on that, we could not try out algorithm on the highschool network and the network data we hav found.
+
+=> At least we wanted to show our understanding on the whole topics and their relations between them. We think we developed a good hybrid model but could not realize it to work without errors. At least you can see how we operationalie the hybrid algorithm and the codes we have developed in that way. We are including our asnwers up to this step for this question maybe we can have some points :) 
+
+
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+#---------------------------------------------------------------------------------------------------------------
+
+
+
+
