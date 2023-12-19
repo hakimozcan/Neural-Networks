@@ -1434,7 +1434,7 @@ Threshold model relies heavily on the notion of “threshold” in human decisio
 ```{r}
 
 #IMPORTING SURVEY DATA 
-survey_thresholds <- read.csv("C:/Users/Uygar TALU/Desktop/Question15_OnceABeefThreshold.csv")
+survey_thresholds <- read.csv("Question15_OnceABeefThreshold.csv")
 survey_thresholds
 ```
 
@@ -2661,9 +2661,9 @@ print(result_hybrid_algo$avg_daily_infected)
 
 ```{r}
 # Read in the data
-facebook_page_network_edges <- read.csv("C:/Users/Uygar TALU/Desktop/facebook network/musae_facebook_edges.csv",
+facebook_page_network_edges <- read.csv("musae_facebook_edges.csv",
                                         header=FALSE)
-facebook_page_network_att <- read.csv("C:/Users/Uygar TALU/Desktop/facebook network/musae_facebook_target.csv",
+facebook_page_network_att <- read.csv("musae_facebook_target.csv",
                                         header=FALSE)
 ```
 
